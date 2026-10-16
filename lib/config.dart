@@ -1,9 +1,19 @@
 /// Backend configuration recovered from the original STPG Command Center APK.
 /// The publishable key is a public, client-side Supabase key (safe to ship).
 class StpgConfig {
-  static const supabaseUrl = 'https://zastfoacrnuhzztvgsck.supabase.co';
-  static const supabasePublishableKey =
-      'sb_publishable_xRYBerR806xR2ibPwEOD5g_SEZ4nCmW';
+  /// Which backend to use: `dev` (your own STPG Dev Supabase project, default)
+  /// or `stpg` (the original drivestpg.com backend). Switch with
+  /// `--dart-define=STPG_BACKEND=stpg`.
+  static const backend = String.fromEnvironment('STPG_BACKEND', defaultValue: 'dev');
+  static const isDevBackend = backend != 'stpg';
+
+  // Publishable keys are public client keys (safe to ship in the app).
+  static const supabaseUrl = isDevBackend
+      ? 'https://wofuesquilkkniswpikn.supabase.co'
+      : 'https://zastfoacrnuhzztvgsck.supabase.co';
+  static const supabasePublishableKey = isDevBackend
+      ? 'sb_publishable_W32iiRvdkEo8qrgoPd9dig_LZi-rfJD'
+      : 'sb_publishable_xRYBerR806xR2ibPwEOD5g_SEZ4nCmW';
 
   static const commandCenterUrl = 'https://www.drivestpg.com/command-center';
   static const driverPortalUrl = 'https://www.drivestpg.com/login';
