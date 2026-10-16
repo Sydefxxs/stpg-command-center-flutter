@@ -424,7 +424,7 @@ class AppState extends ChangeNotifier {
       final pending = _refreshing ??= _refreshSession(session!.refreshToken);
       try {
         final s = await pending;
-        return call(s.accessToken);
+        return await call(s.accessToken);
       } finally {
         if (identical(_refreshing, pending)) _refreshing = null;
       }
