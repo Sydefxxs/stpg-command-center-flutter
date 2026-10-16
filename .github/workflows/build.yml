@@ -37,7 +37,11 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter analyze --no-fatal-infos
+      - name: Analyze (errors and warnings fail the build)
+        run: |
+          dart analyze --format=machine > analyze.txt 2>&1 || true
+          awk -F'|' '$1=="ERROR"||$1=="WARNING"{print "::error file="$4",line="$5"::"$3" "$8}' analyze.txt
+          ! grep -qE '^(ERROR|WARNING)\|' analyze.txt
       - name: Release keystore (only when the signing secrets exist)
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
