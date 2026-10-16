@@ -1,0 +1,8 @@
+Analyzing stpg-command-center-flutter...                        
+
+   info • An uninitialized variable should have an explicit type annotation. Try adding a type annotation • lib/services/directions_service.dart:100:34 • prefer_typing_uninitialized_variables
+   info • 'getToken' is deprecated and shouldn't be used. Use register() and onRegistered instead. Try replacing the use of the deprecated member with the replacement • lib/services/push_service.dart:71:30 • deprecated_member_use
+   info • 'onTokenRefresh' is deprecated and shouldn't be used. Use onRegistered instead. Try replacing the use of the deprecated member with the replacement • lib/services/push_service.dart:79:26 • deprecated_member_use
+   info • 'getToken' is deprecated and shouldn't be used. Use register() and onRegistered instead. Try replacing the use of the deprecated member with the replacement • lib/services/push_service.dart:103:64 • deprecated_member_use
+
+4 issues found. (ran in 16.8s)
