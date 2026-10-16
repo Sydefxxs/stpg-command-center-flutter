@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 
+import '../api/supabase_api.dart';
 import '../config.dart';
 import '../state/app_state.dart';
 
