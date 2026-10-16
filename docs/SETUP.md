@@ -23,6 +23,8 @@ Supabase Dashboard → **SQL Editor** → paste `supabase/migrations/001_driver_
 3. Add an **iOS app** (bundle id from Xcode) → download `GoogleService-Info.plist` → put it in `ios/Runner/`
    → in Firebase Project settings → Cloud Messaging, upload your **APNs auth key** (Apple Developer account).
 4. Supabase SQL Editor → run `supabase/migrations/002_push_tokens.sql`.
+
+**Hazard pins:** Supabase SQL Editor → run `supabase/migrations/003_hazards.sql` (creates `stpg_hazards`). Until then the app shows "HAZARD TABLE MISSING".
 5. Firebase → Project settings → **Service accounts → Generate new private key** (JSON).
 6. Deploy the function (Supabase CLI): `supabase functions deploy stpg-push --no-verify-jwt`, then
    `supabase secrets set FCM_PROJECT_ID=<firebase project id> FCM_SERVICE_ACCOUNT="$(cat key.json)"`.
