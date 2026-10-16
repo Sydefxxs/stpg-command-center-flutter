@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'screens/assistance_command_screen.dart';
 import 'screens/boot_screen.dart';
 import 'screens/comms_screen.dart';
+import 'screens/convoy_screen.dart';
 import 'screens/dispatch_screen.dart';
 import 'screens/field_assistance_screen.dart';
 import 'screens/home_screen.dart';
@@ -11,13 +12,16 @@ import 'screens/login_screen.dart';
 import 'screens/missions_screen.dart';
 import 'screens/navigation_screen.dart';
 import 'screens/orders_screen.dart';
+import 'screens/trips_screen.dart';
 import 'screens/vehicle_screen.dart';
+import 'services/push_service.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  await PushService.initFirebase();
   final state = AppState();
   await state.init();
   runApp(AppScope(state: state, child: const StpgApp()));
@@ -64,6 +68,8 @@ class _Root extends StatelessWidget {
           CommandScreen.fieldAssistance => const FieldAssistanceScreen(),
           CommandScreen.orders => const OrdersScreen(),
           CommandScreen.vehicle => const VehicleScreen(),
+          CommandScreen.convoy => const ConvoyScreen(),
+          CommandScreen.trips => const TripsScreen(),
         };
     }
     return PopScope(

@@ -110,6 +110,22 @@ class _CommsScreenState extends State<CommsScreen> {
         highlighted: tourOn && _tourStep == 3,
         onTap: () => app.go(CommandScreen.fieldAssistance),
       ),
+      _CommsTile(
+        icon: Icons.groups_outlined,
+        title: 'LIVE CONVOY',
+        subtitle: 'DRIVER POSITIONS // LIVE MAP',
+        status: 'LIVE',
+        statusColor: Stpg.green,
+        onTap: () => app.go(CommandScreen.convoy),
+      ),
+      _CommsTile(
+        icon: Icons.route_outlined,
+        title: 'TRIP HISTORY',
+        subtitle: 'DRIVEN ROUTES // GPX',
+        status: 'SAVED',
+        statusColor: Stpg.orange,
+        onTap: () => app.go(CommandScreen.trips),
+      ),
       if (app.isAdmin)
         _CommsTile(
           icon: StpgIcons.orders,

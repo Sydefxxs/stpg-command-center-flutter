@@ -1,34 +1,35 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../models.dart';
+import '../services/convoy_service.dart';
+import '../services/directions_service.dart';
 import '../services/mission_tracker.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/stpg_map.dart';
 import '../widgets/stpg_widgets.dart';
 
 const _fallbackCenter = LatLng(29.4252, -98.4946);
-const _satelliteUrl =
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const _streetUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 enum _MapStyle { onx, google }
 
 Future<bool> _open(String url) async {
   try {
-    final uri = Uri.parse(url);
-    return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    return await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   } catch (_) {
     return false;
   }
 }
 
-/// Live map + vehicle panel + status tiles (FEATURES.md §2 Navigation).
+String _dist(int meters) {
+  final mi = meters / 1609.344;
+  return mi >= 0.1 ? '${mi.toStringAsFixed(1)} MI' : '${(meters * 3.28084).round()} FT';
+}
+
+/// Live map + vehicle/directions panel + status tiles (FEATURES.md §2 Navigation).
 class NavigationScreen extends StatefulWidget {
   const NavigationScreen({super.key});
 
@@ -37,26 +38,24 @@ class NavigationScreen extends StatefulWidget {
 }
 
 class _NavigationScreenState extends State<NavigationScreen> {
-  final MapController _controller = MapController();
+  final _map = StpgMapController();
   _MapStyle _style = _MapStyle.onx;
-  bool _mapReady = false;
   bool _centeredOnFix = false;
+
+  RouteResult? _route;
+  bool _routing = false;
+  String? _routeError;
+  bool _showDirections = false;
 
   LatLng _centerFor(LiveGps gps) => gps.hasFix ? LatLng(gps.latitude, gps.longitude) : _fallbackCenter;
 
-  void _recenter(LiveGps gps) {
-    if (!_mapReady) return;
-    try {
-      _controller.move(_centerFor(gps), 16);
-    } catch (_) {}
-  }
+  void _recenter(LiveGps gps) => _map.moveTo(_centerFor(gps), zoom: 16);
 
   void _maybeCenterOnFirstFix(LiveGps gps) {
-    if (_centeredOnFix || !gps.hasFix || !_mapReady) return;
+    if (_centeredOnFix || !gps.hasFix) return;
     _centeredOnFix = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _recenter(gps);
+      if (mounted) _recenter(gps);
     });
   }
 
@@ -70,10 +69,60 @@ class _NavigationScreenState extends State<NavigationScreen> {
     await _open('https://www.google.com/maps/search/?api=1&query=${c.latitude},${c.longitude}');
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  List<LatLng> get _stopPoints => [for (final s in MissionTracker.stops) LatLng(s.latitude, s.longitude)];
+
+  Future<void> _buildRoute(LiveGps gps) async {
+    setState(() {
+      _routing = true;
+      _routeError = null;
+    });
+    try {
+      final r = await DirectionsService.route(_centerFor(gps), _stopPoints);
+      if (!mounted) return;
+      setState(() {
+        _route = r;
+        _showDirections = true;
+      });
+      if (r.points.length > 1) _map.fitPoints(r.points);
+    } catch (e) {
+      if (mounted) setState(() => _routeError = 'ROUTE ERROR // ${e.toString().replaceFirst('Exception: ', '')}');
+    } finally {
+      if (mounted) setState(() => _routing = false);
+    }
+  }
+
+  void _clearRoute() => setState(() {
+        _route = null;
+        _routeError = null;
+        _showDirections = false;
+      });
+
+  Future<void> _openRouteInGoogle(LiveGps gps) async {
+    final o = _centerFor(gps);
+    final stops = _stopPoints;
+    final dest = stops.last;
+    final way = stops.sublist(0, stops.length - 1).map((p) => '${p.latitude},${p.longitude}').join('%7C');
+    await _open('https://www.google.com/maps/dir/?api=1&origin=${o.latitude},${o.longitude}'
+        '&destination=${dest.latitude},${dest.longitude}&waypoints=$way&travelmode=driving');
+  }
+
+  /// Index of the next step: first step whose start is ahead (not already passed) of the driver.
+  int _nextStep(LiveGps gps) {
+    final r = _route;
+    if (r == null || r.steps.isEmpty || !gps.hasFix) return 0;
+    const dist = Distance();
+    final me = LatLng(gps.latitude, gps.longitude);
+    var best = 0;
+    var bestD = double.infinity;
+    for (var i = 0; i < r.steps.length; i++) {
+      final d = dist.as(LengthUnit.Meter, me, r.steps[i].start);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    // If we're within ~400 m past the closest step's start, the next maneuver is the following one.
+    return (bestD < 400 && best + 1 < r.steps.length) ? best + 1 : best;
   }
 
   @override
@@ -86,7 +135,17 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final header = _Header(app: app);
     final tiles = _StatusTiles(app: app);
     final map = _buildMapCard(gps, app);
-    final panel = _VehiclePanel(app: app);
+    final panel = _showDirections && _route != null ? _directionsPanel(gps) : _VehiclePanel(app: app);
+    final toggle = _route == null
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(children: [
+              Expanded(child: StpgButton('VEHICLE', filled: !_showDirections, expand: true, height: 38, onTap: () => setState(() => _showDirections = false))),
+              const SizedBox(width: 8),
+              Expanded(child: StpgButton('DIRECTIONS', filled: _showDirections, expand: true, height: 38, onTap: () => setState(() => _showDirections = true))),
+            ]),
+          );
     final tabs = _BottomTabs(app: app);
 
     return Container(
@@ -104,7 +163,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       Expanded(flex: 7, child: map),
                       const SizedBox(width: 16),
-                      Expanded(flex: 3, child: SingleChildScrollView(child: panel)),
+                      Expanded(flex: 3, child: SingleChildScrollView(child: Column(children: [toggle, panel]))),
                     ]),
                   ),
                   const SizedBox(height: 14),
@@ -120,6 +179,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                   const SizedBox(height: 14),
                   SizedBox(height: 420, child: map),
                   const SizedBox(height: 14),
+                  toggle,
                   panel,
                   const SizedBox(height: 14),
                   tabs,
@@ -129,12 +189,50 @@ class _NavigationScreenState extends State<NavigationScreen> {
     );
   }
 
+  Widget _directionsPanel(LiveGps gps) {
+    final r = _route!;
+    final next = _nextStep(gps);
+    return StpgPanel(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text('CONVOY ROUTE', style: Stpg.label(size: 12, color: Stpg.orange, spacing: 2)),
+        const SizedBox(height: 6),
+        Text('${(r.distanceMeters / 1609.344).toStringAsFixed(1)} MI • ${(r.durationSeconds / 60).round()} MIN',
+            style: Stpg.title(size: 22)),
+        Text('TO ${MissionTracker.stops.last.name.toUpperCase()}', style: Stpg.label(size: 11)),
+        const SizedBox(height: 10),
+        for (var i = 0; i < r.steps.length; i++)
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: i == next ? Stpg.activePanel : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: i == next ? Stpg.orange : Stpg.border),
+            ),
+            child: Row(children: [
+              Expanded(
+                child: Text(r.steps[i].instruction.toUpperCase(),
+                    style: Stpg.label(size: 12, color: i == next ? Stpg.orange : Stpg.text, spacing: 0.8)),
+              ),
+              const SizedBox(width: 8),
+              Text(_dist(r.steps[i].distanceMeters), style: Stpg.label(size: 11)),
+            ]),
+          ),
+        const SizedBox(height: 8),
+        StpgButton('OPEN IN GOOGLE MAPS', filled: true, expand: true, onTap: () => _openRouteInGoogle(gps)),
+        const SizedBox(height: 8),
+        StpgButton('CLEAR ROUTE', expand: true, onTap: _clearRoute),
+      ]),
+    );
+  }
+
   Widget _buildMapCard(LiveGps gps, AppState app) {
-    final center = _centerFor(gps);
     final stops = MissionTracker.stops;
     final speed = gps.speedMph ?? 0;
     final acc = gps.accuracyFeet;
     final satellite = _style == _MapStyle.onx;
+    final r = _route;
+    final next = r == null || r.steps.isEmpty ? null : r.steps[_nextStep(gps)];
 
     return Container(
       decoration: BoxDecoration(
@@ -146,49 +244,53 @@ class _NavigationScreenState extends State<NavigationScreen> {
         borderRadius: BorderRadius.circular(17),
         child: Stack(children: [
           Positioned.fill(
-            child: FlutterMap(
-              mapController: _controller,
-              options: MapOptions(
-                initialCenter: center,
-                initialZoom: 16,
-                onMapReady: () {
-                  _mapReady = true;
-                  if (gps.hasFix) {
-                    _centeredOnFix = true;
-                    _recenter(gps);
-                  }
-                },
-              ),
-              children: [
-                TileLayer(
-                  key: ValueKey(satellite),
-                  urlTemplate: satellite ? _satelliteUrl : _streetUrl,
-                  userAgentPackageName: 'com.drivestpg.commandcenter',
-                ),
-                MarkerLayer(markers: [
+            child: ValueListenableBuilder<List<ConvoyDriver>>(
+              valueListenable: ConvoyService.instance.drivers,
+              builder: (context, drivers, _) => StpgMap(
+                center: _centerFor(gps),
+                zoom: 16,
+                satellite: satellite,
+                controller: _map,
+                lines: [if (r != null) StpgMapLine(points: r.points, color: Stpg.orange, width: 6)],
+                markers: [
                   for (final s in stops)
-                    Marker(
-                      point: LatLng(s.latitude, s.longitude),
-                      width: 28,
-                      height: 28,
-                      child: Tooltip(
-                        message: s.name,
-                        child: const Icon(Icons.flag, color: Stpg.orange, size: 22, shadows: [
-                          Shadow(color: Colors.black87, blurRadius: 4),
-                        ]),
+                    StpgMapMarker(id: 'stop-${s.name}', point: LatLng(s.latitude, s.longitude), label: s.name),
+                  for (final d in drivers)
+                    if (d.userId != app.userId)
+                      StpgMapMarker(
+                        id: d.userId,
+                        point: LatLng(d.latitude, d.longitude),
+                        label: d.driverNumber != null ? '#${d.driverNumber.toString().padLeft(3, '0')}' : d.name,
+                        kind: d.sos ? StpgMarkerKind.alert : StpgMarkerKind.driver,
+                        rotation: d.heading?.toDouble(),
                       ),
-                    ),
                   if (gps.hasFix)
-                    Marker(
+                    StpgMapMarker(
+                      id: 'me',
                       point: LatLng(gps.latitude, gps.longitude),
-                      width: 44,
-                      height: 44,
-                      child: _Puck(bearing: gps.bearingDegrees),
+                      label: 'YOU',
+                      kind: StpgMarkerKind.self,
+                      rotation: gps.bearingDegrees?.toDouble(),
                     ),
-                ]),
-              ],
+                ],
+              ),
             ),
           ),
+          // Next-maneuver banner
+          if (next != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 64,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(color: Stpg.orange, borderRadius: BorderRadius.circular(14)),
+                child: Text('NEXT // ${next.instruction.toUpperCase()} • ${_dist(next.distanceMeters)}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Stpg.label(size: 14, color: Colors.white, spacing: 1)),
+              ),
+            ),
           // Style chips
           Positioned(
             left: 12,
@@ -209,24 +311,40 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ),
             ]),
           ),
-          // Recenter
+          // Convoy route + recenter
           Positioned(
             right: 12,
             top: 12,
-            child: Material(
-              color: Colors.black.withValues(alpha: 0.7),
-              shape: const CircleBorder(side: BorderSide(color: Stpg.orange, width: 1.5)),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => _recenter(gps),
-                child: const SizedBox(
-                  width: 42,
-                  height: 42,
-                  child: Center(child: Text('◎', style: TextStyle(color: Stpg.orange, fontSize: 22, fontWeight: FontWeight.w900))),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              StpgButton(_routing ? 'ROUTING...' : 'CONVOY ROUTE',
+                  filled: true, height: 42, onTap: _routing ? null : () => _buildRoute(gps)),
+              const SizedBox(width: 8),
+              Material(
+                color: Colors.black.withValues(alpha: 0.7),
+                shape: const CircleBorder(side: BorderSide(color: Stpg.orange, width: 1.5)),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => _recenter(gps),
+                  child: const SizedBox(
+                    width: 42,
+                    height: 42,
+                    child: Center(child: Text('◎', style: TextStyle(color: Stpg.orange, fontSize: 22, fontWeight: FontWeight.w900))),
+                  ),
                 ),
               ),
-            ),
+            ]),
           ),
+          if (_routeError != null)
+            Positioned(
+              left: 12,
+              right: 12,
+              top: 64,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Stpg.red, borderRadius: BorderRadius.circular(12)),
+                child: Text(_routeError!, style: Stpg.label(size: 12, color: Colors.white, spacing: 1)),
+              ),
+            ),
           // Attribution
           Positioned(
             left: 8,
@@ -234,14 +352,19 @@ class _NavigationScreenState extends State<NavigationScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               color: Colors.black.withValues(alpha: 0.5),
-              child: const Text('© OpenStreetMap / Esri', style: TextStyle(color: Colors.white70, fontSize: 9)),
+              child: Text(
+                StpgConfig.hasGoogleMaps
+                    ? '© Google'
+                    : 'MAP DATA // OSM + ESRI — ADD GOOGLE KEY FOR GOOGLE MAPS',
+                style: const TextStyle(color: Colors.white70, fontSize: 9),
+              ),
             ),
           ),
           // Footer overlay
           Positioned(
             left: 0,
             right: 0,
-            bottom: 12,
+            bottom: 24,
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -256,7 +379,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
           ),
           Positioned(
             right: 10,
-            bottom: 12,
+            bottom: 24,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -270,44 +393,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
         ]),
       ),
     );
-  }
-}
-
-class _Puck extends StatelessWidget {
-  final int? bearing;
-  const _Puck({this.bearing});
-
-  @override
-  Widget build(BuildContext context) {
-    const blue = Color(0xFF1E88E5);
-    return Stack(alignment: Alignment.center, children: [
-      if (bearing != null)
-        Transform.rotate(
-          angle: bearing! * math.pi / 180,
-          child: const Align(
-            alignment: Alignment.topCenter,
-            child: Icon(Icons.arrow_drop_up, color: blue, size: 26),
-          ),
-        ),
-      Container(
-        width: 26,
-        height: 26,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: blue.withValues(alpha: 0.25),
-        ),
-      ),
-      Container(
-        width: 16,
-        height: 16,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: blue,
-          border: Border.all(color: Colors.white, width: 2.5),
-          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 4)],
-        ),
-      ),
-    ]);
   }
 }
 

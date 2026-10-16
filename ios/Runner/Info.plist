@@ -73,6 +73,8 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
+		<string>remote-notification</string>
+		<string>fetch</string>
 	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
@@ -80,5 +82,7 @@
 		<string>onxoffroad</string>
 		<string>tel</string>
 	</array>
+	<key>GMSApiKey</key>
+	<string></string>
 </dict>
 </plist>

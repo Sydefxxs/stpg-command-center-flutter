@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models.dart';
@@ -140,6 +141,7 @@ class MissionTracker {
         );
         state.value = s;
         await _saveState();
+        await _addHistory(s);
       } else {
         state.value = s;
       }
@@ -283,6 +285,7 @@ class MissionTracker {
       error: error,
     );
     await _saveState();
+    await _addHistory(state.value);
   }
 
   /// Stop recording, write GPX. Returns an error message, or null on success.
@@ -310,6 +313,7 @@ class MissionTracker {
       error: err ?? '',
     );
     await _saveState();
+    await _addHistory(state.value);
     return err;
   }
 
@@ -325,6 +329,87 @@ class MissionTracker {
     } catch (_) {
       return null;
     }
+  }
+
+  // ---- Trip history ----
+
+  Future<File> _historyFile() async => File('${(await _dir()).path}/history.json');
+
+  Future<List<MissionTripState>> _readHistory() async {
+    try {
+      final f = await _historyFile();
+      if (!await f.exists()) return [];
+      final j = jsonDecode(await f.readAsString());
+      if (j is! List) return [];
+      return j.whereType<Map<String, dynamic>>().map(MissionTripState.fromJson).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _writeHistory(List<MissionTripState> list) async {
+    final f = await _historyFile();
+    final tmp = File('${f.path}.tmp');
+    await tmp.writeAsString(jsonEncode(list.map((t) => t.toJson()).toList()), flush: true);
+    await tmp.rename(f.path);
+  }
+
+  Future<void> _addHistory(MissionTripState t) async {
+    if (kIsWeb || t.tripId.isEmpty) return;
+    try {
+      final list = await _readHistory();
+      list.removeWhere((e) => e.tripId == t.tripId);
+      list.insert(0, t.copyWith(active: false, saving: false));
+      await _writeHistory(list);
+    } catch (_) {}
+  }
+
+  /// Completed / interrupted trips, newest first.
+  Future<List<MissionTripState>> history() async => kIsWeb ? [] : _readHistory();
+
+  /// Recorded track of a trip, split into GPS segments.
+  Future<List<List<LatLng>>> trackSegments(String tripId) async {
+    if (kIsWeb) return [];
+    try {
+      final f = File('${(await _dir()).path}/$tripId.csv');
+      if (!await f.exists()) return [];
+      final segs = <String, List<LatLng>>{};
+      for (final line in await f.readAsLines()) {
+        final p = line.split(',');
+        if (p.length != 4) continue;
+        final lat = double.tryParse(p[0]), lng = double.tryParse(p[1]);
+        if (lat == null || lng == null) continue;
+        segs.putIfAbsent(p[3], () => []).add(LatLng(lat, lng));
+      }
+      return segs.values.toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Absolute path of a trip's GPX file, or null.
+  Future<String?> gpxPath(String tripId) async {
+    if (kIsWeb) return null;
+    try {
+      final f = File('${(await _dir()).path}/$tripId.gpx');
+      return await f.exists() ? f.path : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Delete a trip's files and history entry.
+  Future<void> deleteTrip(String tripId) async {
+    if (kIsWeb) return;
+    try {
+      final d = await _dir();
+      for (final ext in ['csv', 'gpx']) {
+        final f = File('${d.path}/$tripId.$ext');
+        if (await f.exists()) await f.delete();
+      }
+      final list = await _readHistory()..removeWhere((e) => e.tripId == tripId);
+      await _writeHistory(list);
+    } catch (_) {}
   }
 
   // ---- GPX ----

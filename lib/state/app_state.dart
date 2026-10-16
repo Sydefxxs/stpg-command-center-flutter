@@ -9,10 +9,13 @@ import '../api/weather_api.dart';
 import '../config.dart';
 import '../models.dart';
 import '../services/gps_service.dart';
+import '../services/convoy_service.dart';
 import '../services/mission_tracker.dart';
+import '../services/push_service.dart';
+import '../services/sos_service.dart';
 import '../theme.dart';
 
-enum CommandScreen { home, navigation, comms, dispatch, missions, assistanceCommand, fieldAssistance, orders, vehicle }
+enum CommandScreen { home, navigation, comms, dispatch, missions, assistanceCommand, fieldAssistance, orders, vehicle, convoy, trips }
 
 enum AuthStage { booting, checking, loggedOut, loggedIn }
 
@@ -342,6 +345,9 @@ class AppState extends ChangeNotifier {
       _alertTimer?.cancel();
       _alertTimer = Timer.periodic(const Duration(seconds: StpgConfig.alertPollSeconds), (_) => _pollAlerts());
     }
+    unawaited(ConvoyService.instance.start(this));
+    unawaited(PushService.instance.init(this));
+    unawaited(SosService.instance.restore(this));
     if (!(prefs.getBool(kHomeTourDone) ?? false)) {
       homeTourStep = 0;
       notifyListeners();
@@ -368,6 +374,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    await ConvoyService.instance.stop();
+    await PushService.instance.unregister(this);
     _radioTimer?.cancel();
     _alertTimer?.cancel();
     await _clearSession();
