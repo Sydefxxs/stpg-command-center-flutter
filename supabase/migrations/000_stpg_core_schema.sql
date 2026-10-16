@@ -1,6 +1,6 @@
 -- STPG Command Center — core schema for a fresh Supabase project (dev/test backend).
 -- Recreates everything the app reads/writes on the original STPG backend.
--- Run in Supabase Dashboard → SQL Editor → paste → Run. Safe to run more than once.
+-- Safe to run more than once. Setup steps: docs/SETUP.md.
 
 -- ============ Admins ============
 create table if not exists public.stpg_admins (
@@ -166,5 +166,3 @@ insert into public.stpg_missions (title, instructions, deadline, status)
   select 'COASTAL CONVOY SHAKEDOWN', 'Meet at Hacienda Ford, run the convoy to Beach Access #6 and record the route.', now() + interval '7 days', 'ACTIVE'
   where not exists (select 1 from public.stpg_missions);
 
--- To make yourself an admin (run once, with your sign-in email):
---   insert into public.stpg_admins (user_id) select id from auth.users where email = 'you@example.com' on conflict do nothing;

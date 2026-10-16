@@ -6,6 +6,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keyProps = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { stream -> this.load(stream) }
+}
+
 val stpgLocalProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { stream -> this.load(stream) }
@@ -25,26 +30,32 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.drivestpg.commandcenter.flutter"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    // Release signing: android/key.properties (local) or STPG_* environment variables (CI).
+    // Without them, release builds fall back to the debug key (fine for testing, not for Google Play).
+    signingConfigs {
+        create("release") {
+            val store = keyProps.getProperty("storeFile") ?: System.getenv("STPG_KEYSTORE_PATH")
+            if (store != null && file(store).exists()) {
+                storeFile = file(store)
+                storePassword = keyProps.getProperty("storePassword") ?: System.getenv("STPG_KEYSTORE_PASSWORD")
+                keyAlias = keyProps.getProperty("keyAlias") ?: System.getenv("STPG_KEY_ALIAS")
+                keyPassword = keyProps.getProperty("keyPassword") ?: System.getenv("STPG_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            val release = signingConfigs.getByName("release")
+            signingConfig = if (release.storeFile != null) release else signingConfigs.getByName("debug")
         }
     }
 }
@@ -63,7 +74,7 @@ flutter {
     source = "../.."
 }
 
-// Firebase push notifications: only enabled once android/app/google-services.json is added.
+// Optional: google-services.json instead of FIREBASE_* build settings.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/legal_links.dart';
 import '../widgets/stpg_widgets.dart';
 
 /// "FOUNDING DRIVER PROFILE" modal: badge, name, assigned vehicle, sign out.
@@ -76,6 +77,8 @@ Future<void> showDriverProfileDialog(BuildContext context) {
           ),
           const SizedBox(height: 8),
           StpgButton('CLOSE', expand: true, filled: true, onTap: () => Navigator.of(ctx).pop()),
+          const SizedBox(height: 6),
+          const LegalLinks(showDelete: true),
         ],
       );
     },

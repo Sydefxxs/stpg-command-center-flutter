@@ -1,5 +1,5 @@
 -- STPG push notifications: device tokens + triggers that call the `stpg-push` Edge Function.
--- Run in Supabase Dashboard → SQL Editor → paste → Run. Safe to run more than once.
+-- Safe to run more than once. Setup steps: docs/SETUP.md.
 
 create extension if not exists pg_net;
 
@@ -21,13 +21,17 @@ create policy "own tokens insert" on public.stpg_push_tokens for insert to authe
 create policy "own tokens update" on public.stpg_push_tokens for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own tokens delete" on public.stpg_push_tokens for delete to authenticated using (user_id = auth.uid());
 
--- 2) Where the Edge Function lives (service role only: RLS on, no policies).
+-- 2) Where the Edge Function lives + the shared secret it checks.
+--    Locked down: RLS on, no policies, no grants to app roles (only the trigger reads it).
 create table if not exists public.stpg_push_config (
-  id            int primary key default 1 check (id = 1),
-  function_url  text,   -- e.g. https://zastfoacrnuhzztvgsck.supabase.co/functions/v1/stpg-push
-  service_key   text    -- the project's service_role key (keep secret)
+  id              int primary key default 1 check (id = 1),
+  function_url    text,
+  webhook_secret  text
 );
+alter table public.stpg_push_config add column if not exists webhook_secret text;
+alter table public.stpg_push_config drop column if exists service_key;
 alter table public.stpg_push_config enable row level security;
+revoke all on public.stpg_push_config from anon, authenticated;
 insert into public.stpg_push_config (id) values (1) on conflict (id) do nothing;
 
 -- 3) Trigger function: forwards the new row to the Edge Function.
@@ -35,8 +39,8 @@ create or replace function public.stpg_notify_push() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare cfg record;
 begin
-  select function_url, service_key into cfg from public.stpg_push_config where id = 1;
-  if cfg.function_url is null or cfg.service_key is null then
+  select function_url, webhook_secret into cfg from public.stpg_push_config where id = 1;
+  if cfg.function_url is null or cfg.webhook_secret is null then
     return new; -- push not configured yet
   end if;
   -- Missions: only when they become ACTIVE. Assistance: only new ACTIVE requests.
@@ -49,7 +53,7 @@ begin
   end if;
   perform net.http_post(
     url := cfg.function_url,
-    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || cfg.service_key),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-stpg-webhook-secret', cfg.webhook_secret),
     body := jsonb_build_object('type', tg_table_name, 'record', to_jsonb(new))
   );
   return new;
@@ -66,3 +70,5 @@ create trigger stpg_push_mission after insert or update of status on public.stpg
 drop trigger if exists stpg_push_assistance on public.stpg_assistance_requests;
 create trigger stpg_push_assistance after insert on public.stpg_assistance_requests
   for each row execute function public.stpg_notify_push();
+
+revoke execute on function public.stpg_notify_push() from public, anon, authenticated;

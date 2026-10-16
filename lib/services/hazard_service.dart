@@ -55,6 +55,8 @@ class HazardService {
     if (s.contains('PGRST205') || s.toLowerCase().contains('stpg_hazards')) {
       return 'HAZARD TABLE MISSING // RUN SUPABASE MIGRATION 003';
     }
+    if (s.contains('row-level security') || s.contains('HTTP 403')) return 'HAZARDS LOCKED // ACCOUNT NOT APPROVED YET';
+    if (s.contains('check constraint')) return 'HAZARD REJECTED // INVALID DATA';
     return 'HAZARDS OFFLINE';
   }
 
@@ -106,7 +108,6 @@ class HazardService {
             if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
             'latitude': g.latitude,
             'longitude': g.longitude,
-            'driver_name': app.driverProfile?.fullName,
           }, {'Prefer': 'return=minimal'}));
       await refresh();
       return null;

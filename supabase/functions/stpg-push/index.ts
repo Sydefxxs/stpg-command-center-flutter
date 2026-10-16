@@ -1,7 +1,8 @@
 // STPG push sender (Supabase Edge Function, Deno).
-// Called by database triggers (migration 002) with { type, record }.
-// Secrets: FCM_PROJECT_ID, FCM_SERVICE_ACCOUNT (Firebase service-account JSON).
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
+// Called only by the database triggers in migration 002, which send the shared
+// x-stpg-webhook-secret header. Required function secrets (docs/SETUP.md):
+//   STPG_WEBHOOK_SECRET, FCM_SERVICE_ACCOUNT, optional FCM_PROJECT_ID.
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -51,18 +52,31 @@ function message(type: string, rec: Record<string, unknown>) {
   }
 }
 
+function sameSecret(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 Deno.serve(async (req) => {
+  if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+  const expected = Deno.env.get("STPG_WEBHOOK_SECRET") ?? "";
+  if (!sameSecret(req.headers.get("x-stpg-webhook-secret") ?? "", expected)) {
+    return new Response("forbidden", { status: 403 });
+  }
   try {
     const { type, record } = await req.json();
     const msg = message(type, record ?? {});
     if (!msg) return new Response("ignored", { status: 200 });
 
-    // Assistance alerts go to admins only: users listed in public.stpg_admins(user_id) if that table
-    // exists, otherwise everyone (adjust to match how is_stpg_admin() decides admins).
+    // Assistance alerts go to admins only (public.stpg_admins). If that lookup fails,
+    // send nothing rather than leaking a driver's emergency to everyone.
     let q = supabase.from("stpg_push_tokens").select("token,user_id");
     if (msg.adminsOnly) {
       const admins = await supabase.from("stpg_admins").select("user_id");
-      if (!admins.error && admins.data) q = q.in("user_id", admins.data.map((a: { user_id: string }) => a.user_id));
+      if (admins.error || !admins.data?.length) return new Response("no admins", { status: 200 });
+      q = q.in("user_id", admins.data.map((a: { user_id: string }) => a.user_id));
     }
     const { data: tokens, error } = await q;
     if (error) throw error;
@@ -96,6 +110,7 @@ Deno.serve(async (req) => {
     }
     return new Response(JSON.stringify({ sent }), { status: 200, headers: { "Content-Type": "application/json" } });
   } catch (e) {
-    return new Response(String(e), { status: 500 });
+    console.error(e);
+    return new Response("error", { status: 500 });
   }
 });

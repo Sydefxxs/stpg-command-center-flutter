@@ -10,11 +10,12 @@ Flutter rebuild of the **STPG Raptor Command Center** Android app (`com.drivestp
 |---|---|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | How drivers and admins use every screen |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Code layout, state, services, data flow |
-| [docs/SETUP.md](docs/SETUP.md) | Owner checklist: Supabase, Google Maps key, push notifications |
+| [docs/SETUP.md](docs/SETUP.md) | **What's still needed**: accounts, keys and one-time setup steps |
 | [docs/BACKEND.md](docs/BACKEND.md) | Supabase tables, migrations, REST calls, security rules |
 | [docs/BRANCHES.md](docs/BRANCHES.md) | The project split into parts — one branch per milestone |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in each part |
-| [docs/FEATURES.md](docs/FEATURES.md) | Original-app feature spec and walkthrough notes |
+| [docs/FEATURES.md](docs/FEATURES.md) | Screen-by-screen spec of the original app |
+| [Privacy](https://sydefxxs.github.io/stpg-command-center-flutter/privacy.html) · [Terms](https://sydefxxs.github.io/stpg-command-center-flutter/terms.html) | Legal pages (drafts for STPG review) |
 
 ## Features at a glance
 
@@ -34,7 +35,7 @@ Flutter rebuild of the **STPG Raptor Command Center** Android app (`com.drivestp
 flutter pub get
 flutter run                                   # Android / iOS device or simulator
 flutter run -d chrome                         # web
-flutter build apk --dart-define=GOOGLE_MAPS_API_KEY=...   # optional Google Maps
+flutter build apk --dart-define=GOOGLE_MAPS_API_KEY=...   # optional Google Maps (see docs/SETUP.md)
 flutter run --dart-define=STPG_BACKEND=stpg   # use the original STPG backend instead of the dev one
 ```
 
@@ -48,4 +49,3 @@ Every push to `main` runs `.github/workflows/build.yml`:
 | `ios` | unsigned iOS build (artifact `stpg-command-center-ios-unsigned`) |
 | `web` | deploys the web app to GitHub Pages |
 
-Build logs are also pushed to the `ci-android` and `ci-ios` branches.

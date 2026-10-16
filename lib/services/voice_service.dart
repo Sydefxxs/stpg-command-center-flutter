@@ -54,7 +54,9 @@ class VoiceService {
 
   /// Call straight from a button tap: iPhone Safari only allows speech after a user gesture.
   void prime() {
-    if (enabled.value) speak('Command center ready', force: true);
+    if (!enabled.value) return;
+    // A near-silent utterance inside the tap unlocks speech for the rest of the session.
+    _engine().then((t) => t.speak(' ')).catchError((_) => null);
   }
 
   Future<void> speak(String text, {bool force = false}) async {

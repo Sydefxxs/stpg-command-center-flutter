@@ -10,7 +10,7 @@
 | `part-4-web-app-phone-layout` | iPhone web app | Web build + GitHub Pages deploy, PWA icons, GPS on iPhone Safari, location retry bar, weather fallback, compact phone layouts |
 | `part-5-compass` | Real compass | Magnetometer (Android/iOS) and DeviceOrientation (web, iPhone tap-to-enable), GPS-course fallback, smoothing, degree readout, responsive width |
 | `part-6-drive-mode-hazards` | Driving features | Drive Mode, voice turn-by-turn, off-route reroute, hazard pins (`003`), convoy-gap alerts, keep-awake, GPS accuracy colors, haptics |
-| `docs-documentation` | Documentation | This documentation set (README, user guide, architecture, backend, setup, changelog) |
+| `part-7-security-legal` | Security & legal | Approved-drivers-only access, secured push function, secure token storage, privacy policy & terms, setup checklist, documentation |
 
 ## Working with them
 

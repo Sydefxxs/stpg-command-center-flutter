@@ -11,6 +11,7 @@ import '../models.dart';
 import '../services/gps_service.dart';
 import '../services/hazard_service.dart';
 import '../services/heading_service.dart';
+import '../services/session_store.dart';
 import '../services/route_guidance.dart';
 import '../services/voice_service.dart';
 import '../services/convoy_service.dart';
@@ -39,9 +40,6 @@ String environmentAsset(String key) {
 
 /// Single app-wide state object. Screens read it through [AppScope.of].
 class AppState extends ChangeNotifier {
-  static const _sessionPrefs = 'stpg_session';
-  static const _kAccess = '${_sessionPrefs}_access';
-  static const _kRefresh = '${_sessionPrefs}_refresh';
   static const _kTheme = 'theme_mode';
   static const _kImageMode = 'image_mode';
   static const _kImageIndex = 'image_index';
@@ -49,6 +47,8 @@ class AppState extends ChangeNotifier {
   static const kCommsTourDone = 'comms_tour_completed_v1';
 
   late SharedPreferences prefs;
+  late SessionStore _sessions;
+  Future<StpgSession>? _refreshing;
 
   // ---------- Auth ----------
   AuthStage stage = AuthStage.booting;
@@ -286,6 +286,7 @@ class AppState extends ChangeNotifier {
   // ---------- Lifecycle ----------
   Future<void> init() async {
     prefs = await SharedPreferences.getInstance();
+    _sessions = SessionStore(prefs);
     themeMode = prefs.getString(_kTheme) ?? 'AUTO';
     imageMode = prefs.getString(_kImageMode) ?? 'WEATHER';
     slideshowIndex = prefs.getInt(_kImageIndex) ?? 0;
@@ -305,8 +306,7 @@ class AppState extends ChangeNotifier {
   Future<void> finishBoot() async {
     stage = AuthStage.checking;
     notifyListeners();
-    final access = prefs.getString(_kAccess);
-    final refresh = prefs.getString(_kRefresh);
+    final (access, refresh) = await _sessions.read();
     if (access != null && refresh != null) {
       try {
         final s = await SupabaseApi.refresh(refresh);
@@ -336,8 +336,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _onSignedIn(StpgSession s) async {
     session = s;
-    await prefs.setString(_kAccess, s.accessToken);
-    await prefs.setString(_kRefresh, s.refreshToken);
+    await _sessions.write(s.accessToken, s.refreshToken);
     stage = AuthStage.loggedIn;
     screen = CommandScreen.home;
     notifyListeners();
@@ -411,8 +410,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _clearSession() async {
-    await prefs.remove(_kAccess);
-    await prefs.remove(_kRefresh);
+    await _sessions.clear();
   }
 
   /// Runs an authenticated call; on 401 (expired JWT) refreshes the session once and retries.
@@ -421,12 +419,23 @@ class AppState extends ChangeNotifier {
       return await call(token);
     } on SupabaseException catch (e) {
       if (e.statusCode != 401 || session == null) rethrow;
-      final s = await SupabaseApi.refresh(session!.refreshToken);
-      session = s;
-      await prefs.setString(_kAccess, s.accessToken);
-      await prefs.setString(_kRefresh, s.refreshToken);
-      return call(s.accessToken);
+      // Several pollers can hit an expired token at once; refresh only once
+      // (refresh tokens are single-use, a second refresh would sign the driver out).
+      final pending = _refreshing ??= _refreshSession(session!.refreshToken);
+      try {
+        final s = await pending;
+        return call(s.accessToken);
+      } finally {
+        if (identical(_refreshing, pending)) _refreshing = null;
+      }
     }
+  }
+
+  Future<StpgSession> _refreshSession(String refreshToken) async {
+    final s = await SupabaseApi.refresh(refreshToken);
+    session = s;
+    await _sessions.write(s.accessToken, s.refreshToken);
+    return s;
   }
 
   /// Public wrapper so screens get automatic token refresh too.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/legal_links.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -171,6 +172,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         textAlign: TextAlign.center,
                         style: Stpg.label(size: 10.5, spacing: 1.4),
                       ),
+                      const SizedBox(height: 8),
+                      const LegalLinks(),
                     ],
                   ),
                 ),

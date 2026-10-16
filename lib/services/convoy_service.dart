@@ -132,7 +132,9 @@ class ConvoyService {
   }
 
   void _setError(Object e) {
-    if (e is _ConvoyHttpError && e.missing) {
+    if (e is _ConvoyHttpError && (e.status == 401 || e.status == 403 || e.message.contains('row-level security'))) {
+      error.value = 'CONVOY LOCKED // ACCOUNT NOT APPROVED YET — ASK AN STPG ADMIN';
+    } else if (e is _ConvoyHttpError && e.missing) {
       error.value = 'CONVOY TABLE MISSING // RUN SUPABASE MIGRATION 001';
     } else if (e is _ConvoyHttpError) {
       error.value = 'CONVOY OFFLINE // ${e.message}';

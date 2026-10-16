@@ -6,7 +6,7 @@
 - **Android app:** GitHub → Actions → latest run → artifact `stpg-command-center-apk` → install the APK.
 - **iOS app:** needs an Apple Developer account for TestFlight; until then use the web app.
 
-Sign in with your STPG driver email and password. First launch runs a 10-step guided tour (replay it from Comms).
+Sign in with your STPG driver email and password. New accounts must be approved by an STPG admin before the convoy, dispatches and missions appear (the convoy shows *ACCOUNT NOT APPROVED YET* until then). First launch runs a 10-step guided tour (replay it from Comms).
 
 **Allow location** when asked. On iPhone, if GPS stays on *SEARCHING*: Settings → Privacy & Security → Location Services → Safari Websites → *While Using*, then tap the location bar on Home.
 
@@ -64,3 +64,7 @@ When you're 2+ miles behind the convoy leader you get a spoken alert (at most ev
 ## Admin tools
 
 Visible only to accounts in `stpg_admins`: send dispatches, Assistance Command (active requests, resolve), Parts Counter orders, pop-up alerts for new assistance requests and orders, set the GMRS channel, remove any hazard pin.
+
+## Privacy, terms and account deletion
+
+Links to the [Privacy Policy](https://sydefxxs.github.io/stpg-command-center-flutter/privacy.html) and [Terms of Use](https://sydefxxs.github.io/stpg-command-center-flutter/terms.html) are on the login screen and in **Driver Profile**. Driver Profile also has **DELETE ACCOUNT**, which explains how to ask STPG to delete your account.

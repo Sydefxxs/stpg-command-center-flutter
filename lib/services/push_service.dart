@@ -36,7 +36,10 @@ class PushService {
   static Future<void> initFirebase() async {
     if (kIsWeb) return;
     try {
-      await Firebase.initializeApp();
+      final opts = StpgConfig.firebaseOptions;
+      // Options come from build settings (see docs/SETUP.md); without them we fall back
+      // to google-services.json / GoogleService-Info.plist if those files are present.
+      opts != null ? await Firebase.initializeApp(options: opts) : await Firebase.initializeApp();
       configured = true;
       FirebaseMessaging.onBackgroundMessage(_bg);
     } catch (_) {

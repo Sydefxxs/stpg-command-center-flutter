@@ -50,6 +50,7 @@ dependencies:
   web: any
   flutter_tts: any
   wakelock_plus: any
+  flutter_secure_storage: any
 
 dev_dependencies:
   flutter_test:

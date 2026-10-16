@@ -1,5 +1,28 @@
 # Changelog
 
+## Part 7 — Security & legal (`part-7-security-legal`)
+- `004_security.sql`:
+  - New logins must be approved before they can see the convoy, hazards, dispatches or missions.
+  - Drivers can't change their own driver number.
+  - Names on convoy positions and hazard pins are filled in by the server.
+- Hazard pins: only known kinds, notes up to 280 characters, valid coordinates.
+- Push:
+  - The function now requires a shared webhook secret.
+  - The database no longer stores the `service_role` key.
+  - Assistance alerts are never sent to everyone by mistake.
+- App:
+  - Sign-in tokens are kept in the Keychain or Android encrypted storage.
+  - Android backups and plain-HTTP traffic are off.
+  - Token refresh is shared between callers, which fixes random sign-outs when several screens refreshed at once.
+  - A clear "account not approved" message on the convoy and hazards.
+- Builds:
+  - Firebase is configured through build variables.
+  - Android release signing comes from secrets.
+  - The web build no longer includes the Maps key.
+  - The CI-log branches were removed.
+- Legal: privacy policy (with account-deletion instructions) and terms of use, linked from the login screen and the driver profile.
+- Docs: `SETUP.md` rewritten as the single checklist of missing keys and steps; leftover scaffolding removed.
+
 ## Part 6 — Drive Mode & hazards (`part-6-drive-mode-hazards`)
 - **Drive Mode** screen (`lib/screens/drive_screen.dart`): huge speed, compass, next-turn card with maneuver arrow, remaining distance / arrival time / minutes left, HAZARD / MAP / SOS buttons, landscape layout.
 - **Route guidance engine** (`lib/services/route_guidance.dart`): progress along the polyline, next maneuver, live remaining distance & ETA, spoken turns (speed-scaled lead distance), off-route detection (≈75 m for 3 accurate fixes) and automatic reroute to the stops not yet reached, arrival detection.

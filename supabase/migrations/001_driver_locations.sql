@@ -1,5 +1,5 @@
 -- STPG live convoy: driver locations
--- HOW TO RUN: Supabase dashboard -> SQL editor -> New query -> paste this whole file -> Run.
+-- Setup steps: docs/SETUP.md.
 -- Safe to run more than once (idempotent).
 
 create table if not exists public.stpg_driver_locations (

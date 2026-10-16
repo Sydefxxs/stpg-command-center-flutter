@@ -24,16 +24,18 @@ lib/
     convoy_service.dart     Shares own position every 10 s, polls other drivers every 5 s
     hazard_service.dart     Hazard pins: list (20 s poll), drop, remove
     sos_service.dart        SOS beacon: creates assistance request, updates location every 30 s
+    session_store.dart      Sign-in tokens: Keychain / Android encrypted storage (browser storage on web)
     mission_tracker.dart    Coastal Convoy GPX recorder, trip history on device
     push_service.dart       Firebase Messaging + local notifications, token registration
   widgets/                  StpgPanel/Button/…, CompassHud, StpgMap (Google or flutter_map), SosPanel
   screens/                  home, navigation, drive, comms, convoy, trips, dispatch, missions,
                             field_assistance, assistance_command, orders, vehicle, login, boot
   dialogs/                  driver profile, weather, GMRS, mission controls, hazard picker, alert overlays
+  widgets/legal_links.dart  Privacy / Terms / Delete-account links
 supabase/
   migrations/000–003        SQL to run in the Supabase SQL editor
   functions/stpg-push       Edge Function that sends FCM v1 pushes
-web/                        index.html, manifest, icons (PWA)
+web/                        index.html, manifest, icons (PWA), privacy.html, terms.html
 .github/workflows/build.yml CI: analyze, APK, iOS (no codesign), GitHub Pages
 ```
 
@@ -45,7 +47,7 @@ web/                        index.html, manifest, icons (PWA)
 
 ## Sign-in lifecycle
 
-`AppState._onSignedIn` starts, in order: GPS → weather → heading → route guidance → voice prefs → hazards → convoy → push → SOS restore. `signOut` stops convoy and hazards, clears the route and unregisters push. All Supabase calls go through `app.authed(...)`, which refreshes the token once on HTTP 401 and retries.
+`AppState._onSignedIn` starts, in order: GPS → weather → heading → route guidance → voice prefs → hazards → convoy → push → SOS restore. `signOut` stops convoy and hazards, clears the route and unregisters push. All Supabase calls go through `app.authed(...)`: on HTTP 401 it refreshes the session once — shared by every caller, because refresh tokens are single-use — and retries.
 
 ## Location, heading and guidance
 
@@ -69,7 +71,8 @@ DirectionsService.route ─► RouteGuidance.state (GuidanceState) ─► Naviga
 | Define | Default | Purpose |
 |---|---|---|
 | `STPG_BACKEND` | `dev` | `dev` = your own Supabase project, `stpg` = original STPG backend |
-| `GOOGLE_MAPS_API_KEY` | empty | Enables Google Maps + Routes API (CI reads the repo secret) |
+| `GOOGLE_MAPS_API_KEY` | empty | Enables Google Maps + Routes API in the phone apps (CI secret; never in the web build) |
+| `FIREBASE_*` | empty | Firebase options for push notifications (CI variables, see SETUP.md) |
 
 Timings (convoy share/poll, SOS beacon, radio/alert polling, slideshow) are constants in `config.dart`.
 
@@ -78,3 +81,11 @@ Timings (convoy share/poll, SOS beacon, radio/alert polling, slideshow) are cons
 - **Android**: Maps key via `manifestPlaceholders`; core-library desugaring on; `google-services.json` applied only if present.
 - **iOS**: `GMSApiKey` in Info.plist set by CI; location + background modes declared.
 - **Web**: compass needs a tap on iPhone (motion permission); speech starts after the first tap; geolocation needs HTTPS (GitHub Pages).
+
+## Security
+
+- Only the Supabase **publishable** key ships in the app; every table is protected by row-level security (see BACKEND.md).
+- Sign-in tokens are kept in the Keychain on iOS and encrypted storage on Android. Android backups are turned off, so tokens can't be copied out.
+- Release signing keys, the Maps key and Firebase settings come from GitHub secrets and variables at build time. None of them are in the repo.
+- The public web build doesn't include the Maps key.
+- The push function only accepts calls that carry the database's shared secret.
