@@ -1,5 +1,8 @@
 name: build
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main]
@@ -13,8 +16,8 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -23,8 +26,19 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter analyze --no-fatal-infos
-      - run: flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY
+      - run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          flutter analyze --no-fatal-infos 2>&1 | tee ci-logs/analyze.txt
+      - run: |
+          set -o pipefail
+          flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY 2>&1 | tee ci-logs/build-android.txt
+      - name: Publish logs to ci-android branch
+        if: always()
+        run: |
+          mkdir -p ci-logs && cd ci-logs && git init -q && git checkout -q -b ci-android
+          git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "android logs ${GITHUB_SHA::7}" || true
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-android
       - uses: actions/upload-artifact@v4
         with:
           name: stpg-command-center-apk
@@ -33,16 +47,25 @@ jobs:
   ios:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - run: flutter pub get
       - run: /usr/libexec/PlistBuddy -c "Set :GMSApiKey $GOOGLE_MAPS_API_KEY" ios/Runner/Info.plist
-      - run: flutter build ios --release --no-codesign --dart-define=GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY
+      - run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          flutter build ios --release --no-codesign --dart-define=GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY 2>&1 | tee ci-logs/build-ios.txt
       - run: cd build/ios/iphoneos && mkdir Payload && cp -r Runner.app Payload/ && zip -qr stpg-command-center-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
           name: stpg-command-center-ios-unsigned
           path: build/ios/iphoneos/stpg-command-center-unsigned.ipa
+      - name: Publish logs to ci-ios branch
+        if: always()
+        run: |
+          mkdir -p ci-logs && cd ci-logs && tail -300 build-ios.txt > build-ios-tail.txt 2>/dev/null; git init -q && git checkout -q -b ci-ios
+          git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "ios logs ${GITHUB_SHA::7}" || true
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-ios
