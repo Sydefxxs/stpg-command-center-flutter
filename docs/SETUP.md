@@ -1,37 +1,42 @@
-# STPG Command Center — owner setup checklist
+# Owner setup checklist
 
-The app works without these steps; each one switches on an upgrade.
+The app runs without these steps; each one switches on a feature.
 
-## 1. Google Maps (maps, traffic, convoy directions)
-1. https://console.cloud.google.com → create a project → turn on billing.
-2. APIs & Services → Library → enable **Maps SDK for Android**, **Maps SDK for iOS**, **Directions API**.
-3. APIs & Services → Credentials → **Create credentials → API key**. Restrict it to those APIs
-   (and to Android package `com.drivestpg.commandcenter.flutter` if you build release keys only).
-4. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**:
-   name `GOOGLE_MAPS_API_KEY`, value = the key. The next build uses it automatically.
-   Never put the key in the code or in chat.
-   Local runs: `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...` and add `GOOGLE_MAPS_API_KEY=...` to `android/local.properties`.
-Without a key the app uses OpenStreetMap/Esri maps and free OSRM routing.
+## 1. Supabase backend
+1. Create a project at https://supabase.com (or use the existing dev project `wofuesquilkkniswpikn`).
+2. Dashboard → **SQL Editor** → run, in order: `000_stpg_core_schema.sql` (fresh project only), `001_driver_locations.sql`, `003_hazards.sql`, and `002_push_tokens.sql` when you set up push (step 3).
+3. Make yourself an admin (see [BACKEND.md](BACKEND.md)).
+4. Using a different project? Put its URL and **publishable** key in `lib/config.dart`.
 
-## 2. Live convoy map (Supabase)
-Supabase Dashboard → **SQL Editor** → paste `supabase/migrations/001_driver_locations.sql` → **Run**.
+Status: on the dev project `000` and `001` have been run; `002` and `003` have not.
+
+## 2. Google Maps (maps, traffic-aware routes)
+1. https://console.cloud.google.com → project with billing (or the free *Maps Demo Key*).
+2. Enable **Maps SDK for Android**, **Maps SDK for iOS** and **Routes API** (the old Directions API can't be enabled on new projects).
+3. Create an API key and restrict it to those APIs.
+4. GitHub → **Settings → Secrets and variables → Actions** → secret `GOOGLE_MAPS_API_KEY`. The next build uses it. Never put the key in code or chat.
+   Local runs: `flutter run --dart-define=GOOGLE_MAPS_API_KEY=...` and `GOOGLE_MAPS_API_KEY=...` in `android/local.properties`.
+
+Without a key: OpenStreetMap/Esri maps and free OSRM routing. The web app always uses OpenStreetMap/Esri tiles.
 
 ## 3. Push notifications (Firebase + Supabase)
-1. https://console.firebase.google.com → **Add project** (can reuse the Google Cloud project).
-2. Add an **Android app**, package `com.drivestpg.commandcenter.flutter` → download `google-services.json`
-   → put it in `android/app/`.
-3. Add an **iOS app** (bundle id from Xcode) → download `GoogleService-Info.plist` → put it in `ios/Runner/`
-   → in Firebase Project settings → Cloud Messaging, upload your **APNs auth key** (Apple Developer account).
-4. Supabase SQL Editor → run `supabase/migrations/002_push_tokens.sql`.
-
-**Hazard pins:** Supabase SQL Editor → run `supabase/migrations/003_hazards.sql` (creates `stpg_hazards`). Until then the app shows "HAZARD TABLE MISSING".
-5. Firebase → Project settings → **Service accounts → Generate new private key** (JSON).
-6. Deploy the function (Supabase CLI): `supabase functions deploy stpg-push --no-verify-jwt`, then
-   `supabase secrets set FCM_PROJECT_ID=<firebase project id> FCM_SERVICE_ACCOUNT="$(cat key.json)"`.
+1. https://console.firebase.google.com → **Add project**.
+2. Add an **Android app** (`com.drivestpg.commandcenter.flutter`) → `google-services.json` → `android/app/`.
+3. Add an **iOS app** → `GoogleService-Info.plist` → `ios/Runner/`; upload your **APNs auth key** under Cloud Messaging (Apple Developer account).
+4. Supabase SQL Editor → run `002_push_tokens.sql`.
+5. Firebase → Project settings → **Service accounts → Generate new private key**.
+6. `supabase functions deploy stpg-push --no-verify-jwt`
+   `supabase secrets set FCM_PROJECT_ID=<firebase project id> FCM_SERVICE_ACCOUNT="$(cat key.json)"`
 7. SQL Editor:
-   `update stpg_push_config set function_url = 'https://zastfoacrnuhzztvgsck.supabase.co/functions/v1/stpg-push', service_key = '<service_role key>' where id = 1;`
-New dispatches, active missions and assistance requests then push to every signed-in phone/tablet.
-Assistance alerts go to admins only if a `stpg_admins(user_id)` table exists (edit the function to match your admin rule).
+   `update stpg_push_config set function_url = 'https://<project>.supabase.co/functions/v1/stpg-push', service_key = '<service_role key>' where id = 1;`
 
-## 4. SOS + trip history
-Nothing to set up. SOS uses the existing assistance-request table; trips are stored on the device.
+New dispatches, missions and assistance requests then push to signed-in phones.
+
+## 4. Hazard pins
+Run `003_hazards.sql`. Until then the app shows "HAZARD TABLE MISSING // RUN SUPABASE MIGRATION 003".
+
+## 5. SOS, trip history, compass, Drive Mode, voice
+Nothing to set up.
+
+## 6. iOS App Store / TestFlight
+Needs an Apple Developer account ($99/yr) and signing in CI. Until then iPhone users use the web app.
