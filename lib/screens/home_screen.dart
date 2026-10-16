@@ -194,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       alignment: Alignment.topCenter,
                       child: Padding(
                         padding: const EdgeInsets.only(top: 12),
-                        child: CompassHud(headingDegrees: app.gps.bearingDegrees),
+                        child: const CompassHud(),
                       ),
                     ),
                     const Align(
@@ -250,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             height: 120,
             child: Stack(children: [
-              Align(alignment: Alignment.topCenter, child: CompassHud(headingDegrees: app.gps.bearingDegrees)),
+              Align(alignment: Alignment.topCenter, child: const CompassHud()),
               const Align(alignment: Alignment.bottomCenter, child: _RaptorPill()),
             ]),
           ),
@@ -296,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
         SizedBox(
           height: size.height * 0.30,
           child: Stack(children: [
-            Align(alignment: Alignment.topCenter, child: CompassHud(headingDegrees: gps.bearingDegrees)),
+            Align(alignment: Alignment.topCenter, child: CompassHud(width: (size.width - 40).clamp(240.0, 360.0))),
             const Align(alignment: Alignment.bottomCenter, child: _RaptorPill()),
           ]),
         ),

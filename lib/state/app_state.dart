@@ -9,6 +9,7 @@ import '../api/weather_api.dart';
 import '../config.dart';
 import '../models.dart';
 import '../services/gps_service.dart';
+import '../services/heading_service.dart';
 import '../services/convoy_service.dart';
 import '../services/mission_tracker.dart';
 import '../services/push_service.dart';
@@ -338,6 +339,7 @@ class AppState extends ChangeNotifier {
     screen = CommandScreen.home;
     notifyListeners();
     unawaited(GpsService.instance.start());
+    HeadingService.instance.start();
     unawaited(refreshWeather());
     unawaited(_loadProfile());
     unawaited(_pollRadio());

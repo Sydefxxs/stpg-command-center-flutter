@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../config.dart';
 import '../models.dart';
 import '../services/convoy_service.dart';
+import '../services/heading_service.dart';
 import '../services/mission_tracker.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -132,7 +133,7 @@ class _ConvoyScreenState extends State<ConvoyScreen> {
           point: LatLng(me.latitude, me.longitude),
           label: 'YOU',
           kind: StpgMarkerKind.self,
-          rotation: me.bearingDegrees?.toDouble(),
+          rotation: HeadingService.instance.heading.value ?? me.bearingDegrees?.toDouble(),
         ),
     ];
 
