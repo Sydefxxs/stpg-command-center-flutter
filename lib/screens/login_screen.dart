@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../config.dart';
+
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/legal_links.dart';
@@ -167,11 +169,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                      Text(
-                        'USE THE SAME EMAIL + PASSWORD AS YOUR STPG DRIVER PORTAL',
-                        textAlign: TextAlign.center,
-                        style: Stpg.label(size: 10.5, spacing: 1.4),
-                      ),
+                      if (StpgConfig.isDevBackend)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Stpg.orange.withValues(alpha: 0.12),
+                            border: Border.all(color: Stpg.orange),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'TEST VERSION // SIGN IN WITH THE DEMO LOGIN YOU WERE GIVEN.\nDO NOT ENTER YOUR REAL STPG PASSWORD HERE.',
+                            textAlign: TextAlign.center,
+                            style: Stpg.label(size: 10.5, color: Stpg.orange, spacing: 1.2),
+                          ),
+                        )
+                      else
+                        Text(
+                          'USE THE SAME EMAIL + PASSWORD AS YOUR STPG DRIVER PORTAL',
+                          textAlign: TextAlign.center,
+                          style: Stpg.label(size: 10.5, spacing: 1.4),
+                        ),
                       const SizedBox(height: 8),
                       const LegalLinks(),
                     ],
