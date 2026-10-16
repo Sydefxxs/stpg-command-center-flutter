@@ -24,8 +24,15 @@ class DirectionsService {
   /// Driving route from [from] through [stops] (in order). Throws on failure.
   static Future<RouteResult> route(LatLng from, List<LatLng> stops) async {
     if (stops.isEmpty) throw Exception('No destination');
+    if (StpgConfig.hasGoogleMaps) {
+      try {
+        return await _google(from, stops);
+      } catch (_) {
+        // Google not enabled / billing not set up: fall back to free routing.
+      }
+    }
     try {
-      return StpgConfig.hasGoogleMaps ? await _google(from, stops) : await _osrm(from, stops);
+      return await _osrm(from, stops);
     } on Exception {
       rethrow;
     } catch (e) {
@@ -33,60 +40,56 @@ class DirectionsService {
     }
   }
 
-  static String _ll(LatLng p) => '${p.latitude},${p.longitude}';
+  static Map<String, dynamic> _wp(LatLng p) => {
+        'location': {
+          'latLng': {'latitude': p.latitude, 'longitude': p.longitude}
+        }
+      };
 
+  /// Google Routes API (computeRoutes) — replacement for the retired Directions API.
   static Future<RouteResult> _google(LatLng from, List<LatLng> stops) async {
-    final params = <String, String>{
-      'origin': _ll(from),
-      'destination': _ll(stops.last),
-      'mode': 'driving',
-      'key': StpgConfig.googleMapsApiKey,
+    final body = {
+      'origin': _wp(from),
+      'destination': _wp(stops.last),
+      if (stops.length > 1) 'intermediates': stops.sublist(0, stops.length - 1).map(_wp).toList(),
+      'travelMode': 'DRIVE',
+      'routingPreference': 'TRAFFIC_AWARE',
+      'units': 'IMPERIAL',
     };
-    if (stops.length > 1) {
-      params['waypoints'] = stops.sublist(0, stops.length - 1).map(_ll).join('|');
-    }
-    final uri = Uri.https('maps.googleapis.com', '/maps/api/directions/json', params);
-    final res = await http.get(uri).timeout(const Duration(seconds: 20));
-    if (res.statusCode != 200) throw Exception('Directions HTTP ${res.statusCode}');
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    final status = body['status'] as String? ?? 'UNKNOWN';
-    if (status != 'OK') {
-      final msg = body['error_message'] as String?;
-      throw Exception(msg == null ? 'Directions $status' : 'Directions $status: $msg');
-    }
-    final routes = body['routes'] as List? ?? const [];
+    final res = await http
+        .post(
+          Uri.https('routes.googleapis.com', '/directions/v2:computeRoutes'),
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': StpgConfig.googleMapsApiKey,
+            'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,'
+                'routes.legs.steps.distanceMeters,routes.legs.steps.startLocation,'
+                'routes.legs.steps.navigationInstruction',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) throw Exception('Routes HTTP ${res.statusCode}');
+    final j = jsonDecode(res.body) as Map<String, dynamic>;
+    final routes = j['routes'] as List? ?? const [];
     if (routes.isEmpty) throw Exception('No route found');
     final r = routes.first as Map<String, dynamic>;
-    final points = decodePolyline((r['overview_polyline'] as Map)['points'] as String);
-    var dist = 0, dur = 0;
+    final points = decodePolyline((r['polyline'] as Map)['encodedPolyline'] as String);
+    final dur = int.tryParse(('${r['duration'] ?? '0s'}').replaceAll('s', '')) ?? 0;
     final steps = <RouteStep>[];
     for (final leg in (r['legs'] as List? ?? const [])) {
-      dist += ((leg['distance'] as Map?)?['value'] as num? ?? 0).toInt();
-      dur += ((leg['duration'] as Map?)?['value'] as num? ?? 0).toInt();
-      for (final s in (leg['steps'] as List? ?? const [])) {
-        final loc = s['start_location'] as Map;
+      for (final s in ((leg as Map)['steps'] as List? ?? const [])) {
+        final ll = ((s as Map)['startLocation'] as Map?)?['latLng'] as Map?;
+        if (ll == null) continue;
+        final instr = ((s['navigationInstruction'] as Map?)?['instructions'] as String?) ?? 'CONTINUE';
         steps.add(RouteStep(
-          _stripHtml(s['html_instructions'] as String? ?? ''),
-          ((s['distance'] as Map?)?['value'] as num? ?? 0).toInt(),
-          LatLng((loc['lat'] as num).toDouble(), (loc['lng'] as num).toDouble()),
+          instr.replaceAll('\n', ' - '),
+          (s['distanceMeters'] as num? ?? 0).toInt(),
+          LatLng((ll['latitude'] as num).toDouble(), (ll['longitude'] as num).toDouble()),
         ));
       }
     }
-    return RouteResult(points, dist, dur, steps);
-  }
-
-  static String _stripHtml(String s) {
-    return s
-        .replaceAll(RegExp(r'<div[^>]*>'), ' - ')
-        .replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    return RouteResult(points, (r['distanceMeters'] as num? ?? 0).toInt(), dur, steps);
   }
 
   /// Google encoded polyline decoder (precision 1e5).
