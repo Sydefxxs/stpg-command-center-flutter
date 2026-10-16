@@ -1,8 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val stpgLocalProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { stream -> this.load(stream) }
+}
+val mapsApiKey: String =
+    System.getenv("GOOGLE_MAPS_API_KEY") ?: stpgLocalProps.getProperty("GOOGLE_MAPS_API_KEY", "")
 
 android {
     namespace = "com.drivestpg.stpg_command_center"
@@ -20,11 +29,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23
-        val localProps = java.util.Properties().apply {
-            val f = rootProject.file("local.properties"); if (f.exists()) f.inputStream().use { load(it) }
-        }
-        manifestPlaceholders["MAPS_API_KEY"] =
-            System.getenv("GOOGLE_MAPS_API_KEY") ?: localProps.getProperty("GOOGLE_MAPS_API_KEY", "")
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
