@@ -9,14 +9,17 @@ import '../api/weather_api.dart';
 import '../config.dart';
 import '../models.dart';
 import '../services/gps_service.dart';
+import '../services/hazard_service.dart';
 import '../services/heading_service.dart';
+import '../services/route_guidance.dart';
+import '../services/voice_service.dart';
 import '../services/convoy_service.dart';
 import '../services/mission_tracker.dart';
 import '../services/push_service.dart';
 import '../services/sos_service.dart';
 import '../theme.dart';
 
-enum CommandScreen { home, navigation, comms, dispatch, missions, assistanceCommand, fieldAssistance, orders, vehicle, convoy, trips }
+enum CommandScreen { home, navigation, comms, dispatch, missions, assistanceCommand, fieldAssistance, orders, vehicle, convoy, trips, drive }
 
 enum AuthStage { booting, checking, loggedOut, loggedIn }
 
@@ -340,6 +343,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     unawaited(GpsService.instance.start());
     HeadingService.instance.start();
+    RouteGuidance.instance.start();
+    unawaited(VoiceService.instance.init());
+    HazardService.instance.start(this);
     unawaited(refreshWeather());
     unawaited(_loadProfile());
     unawaited(_pollRadio());
@@ -386,6 +392,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> signOut() async {
     await ConvoyService.instance.stop();
+    HazardService.instance.stop();
+    RouteGuidance.instance.clear();
     await PushService.instance.unregister(this);
     _radioTimer?.cancel();
     _alertTimer?.cancel();

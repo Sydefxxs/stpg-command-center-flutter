@@ -303,6 +303,9 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 10),
         _t(app, _tMission, _missionBar(app)),
         const SizedBox(height: 10),
+        StpgButton('▶  DRIVE MODE', icon: Icons.speed, filled: true, expand: true, height: 52,
+            onTap: () => app.go(CommandScreen.drive)),
+        const SizedBox(height: 10),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,

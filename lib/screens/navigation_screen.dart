@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -6,12 +7,17 @@ import '../config.dart';
 import '../models.dart';
 import '../services/convoy_service.dart';
 import '../services/directions_service.dart';
+import '../dialogs/hazard_dialog.dart';
+import '../services/hazard_service.dart';
 import '../services/heading_service.dart';
+import '../services/route_guidance.dart';
+import '../services/voice_service.dart';
 import '../services/mission_tracker.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/stpg_map.dart';
 import '../widgets/stpg_widgets.dart';
+import 'drive_screen.dart';
 
 const _fallbackCenter = LatLng(29.4252, -98.4946);
 
@@ -43,10 +49,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
   _MapStyle _style = _MapStyle.onx;
   bool _centeredOnFix = false;
 
-  RouteResult? _route;
-  bool _routing = false;
-  String? _routeError;
   bool _showDirections = false;
+  RouteGuidance get _g => RouteGuidance.instance;
+  RouteResult? get _route => _g.state.value.route;
+  bool get _routing => _g.busy.value;
+  String? get _routeError => _g.error.value;
 
   LatLng _centerFor(LiveGps gps) => gps.hasFix ? LatLng(gps.latitude, gps.longitude) : _fallbackCenter;
 
@@ -73,30 +80,18 @@ class _NavigationScreenState extends State<NavigationScreen> {
   List<LatLng> get _stopPoints => [for (final s in MissionTracker.stops) LatLng(s.latitude, s.longitude)];
 
   Future<void> _buildRoute(LiveGps gps) async {
-    setState(() {
-      _routing = true;
-      _routeError = null;
-    });
-    try {
-      final r = await DirectionsService.route(_centerFor(gps), _stopPoints);
-      if (!mounted) return;
-      setState(() {
-        _route = r;
-        _showDirections = true;
-      });
-      if (r.points.length > 1) _map.fitPoints(r.points);
-    } catch (e) {
-      if (mounted) setState(() => _routeError = 'ROUTE ERROR // ${e.toString().replaceFirst('Exception: ', '')}');
-    } finally {
-      if (mounted) setState(() => _routing = false);
-    }
+    VoiceService.instance.prime();
+    await _g.startRoute(gps, fallbackOrigin: _fallbackCenter);
+    final r = _route;
+    if (!mounted || r == null) return;
+    setState(() => _showDirections = true);
+    if (r.points.length > 1) _map.fitPoints(r.points);
   }
 
-  void _clearRoute() => setState(() {
-        _route = null;
-        _routeError = null;
-        _showDirections = false;
-      });
+  void _clearRoute() {
+    _g.clear();
+    setState(() => _showDirections = false);
+  }
 
   Future<void> _openRouteInGoogle(LiveGps gps) async {
     final o = _centerFor(gps);
@@ -107,27 +102,17 @@ class _NavigationScreenState extends State<NavigationScreen> {
         '&destination=${dest.latitude},${dest.longitude}&waypoints=$way&travelmode=driving');
   }
 
-  /// Index of the next step: first step whose start is ahead (not already passed) of the driver.
-  int _nextStep(LiveGps gps) {
-    final r = _route;
-    if (r == null || r.steps.isEmpty || !gps.hasFix) return 0;
-    const dist = Distance();
-    final me = LatLng(gps.latitude, gps.longitude);
-    var best = 0;
-    var bestD = double.infinity;
-    for (var i = 0; i < r.steps.length; i++) {
-      final d = dist.as(LengthUnit.Meter, me, r.steps[i].start);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    // If we're within ~400 m past the closest step's start, the next maneuver is the following one.
-    return (bestD < 400 && best + 1 < r.steps.length) ? best + 1 : best;
-  }
+  int _nextStep(LiveGps gps) => _g.state.value.nextStep;
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([_g.state, _g.busy, _g.error, HazardService.instance.hazards, VoiceService.instance.enabled]),
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final app = AppScope.of(context);
     final gps = app.gps;
     _maybeCenterOnFirstFix(gps);
@@ -190,6 +175,32 @@ class _NavigationScreenState extends State<NavigationScreen> {
     );
   }
 
+  void _hazardDetails(String id, AppState app) {
+    final h = HazardService.instance.hazards.value.where((e) => e.id == id).firstOrNull;
+    if (h == null) return;
+    final age = DateTime.now().difference(h.createdAt);
+    final ago = age.inMinutes < 60 ? '${age.inMinutes} MIN AGO' : '${age.inHours} HR AGO';
+    final mine = h.userId == app.userId;
+    showStpgDialog(context, builder: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Icon(hazardIcon(h.kind), color: Stpg.orange, size: 30),
+            const SizedBox(width: 10),
+            Expanded(child: Text(h.kind, style: Stpg.title(size: 22, color: Stpg.orange))),
+          ]),
+          const SizedBox(height: 8),
+          Text('REPORTED $ago${h.driverName == null ? '' : ' BY ${h.driverName!.toUpperCase()}'}', style: Stpg.label(size: 12)),
+          if (h.note != null) ...[const SizedBox(height: 8), Text(h.note!, style: Stpg.label(size: 13, color: Stpg.text))],
+          const SizedBox(height: 16),
+          if (mine || app.isAdmin)
+            StpgButton('REMOVE PIN', color: Stpg.red, expand: true, onTap: () {
+              HazardService.instance.remove(h.id);
+              Navigator.of(ctx).pop();
+            }),
+          const SizedBox(height: 8),
+          StpgButton('CLOSE', expand: true, onTap: () => Navigator.of(ctx).pop()),
+        ]));
+  }
+
   Widget _directionsPanel(LiveGps gps) {
     final r = _route!;
     final next = _nextStep(gps);
@@ -197,7 +208,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('CONVOY ROUTE', style: Stpg.label(size: 12, color: Stpg.orange, spacing: 2)),
         const SizedBox(height: 6),
-        Text('${(r.distanceMeters / 1609.344).toStringAsFixed(1)} MI • ${(r.durationSeconds / 60).round()} MIN',
+        Text('${RouteGuidance.shortDist(_g.state.value.metersRemaining)} • ${(_g.state.value.secondsRemaining / 60).round()} MIN',
             style: Stpg.title(size: 22)),
         Text('TO ${MissionTracker.stops.last.name.toUpperCase()}', style: Stpg.label(size: 11)),
         const SizedBox(height: 10),
@@ -220,7 +231,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
             ]),
           ),
         const SizedBox(height: 8),
-        StpgButton('OPEN IN GOOGLE MAPS', filled: true, expand: true, onTap: () => _openRouteInGoogle(gps)),
+        StpgButton('▶ DRIVE MODE', filled: true, expand: true, onTap: () => AppScope.of(context).go(CommandScreen.drive)),
+        const SizedBox(height: 8),
+        StpgButton('OPEN IN GOOGLE MAPS', expand: true, onTap: () => _openRouteInGoogle(gps)),
         const SizedBox(height: 8),
         StpgButton('CLEAR ROUTE', expand: true, onTap: _clearRoute),
       ]),
@@ -233,6 +246,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final acc = gps.accuracyFeet;
     final satellite = _style == _MapStyle.onx;
     final r = _route;
+    final gs = _g.state.value;
     final next = r == null || r.steps.isEmpty ? null : r.steps[_nextStep(gps)];
 
     return Container(
@@ -248,6 +262,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
             child: ValueListenableBuilder<List<ConvoyDriver>>(
               valueListenable: ConvoyService.instance.drivers,
               builder: (context, drivers, _) => StpgMap(
+                onMarkerTap: (m) {
+                  if (m.id.startsWith('hz-')) _hazardDetails(m.id.substring(3), app);
+                },
                 center: _centerFor(gps),
                 zoom: 16,
                 satellite: satellite,
@@ -265,6 +282,13 @@ class _NavigationScreenState extends State<NavigationScreen> {
                         kind: d.sos ? StpgMarkerKind.alert : StpgMarkerKind.driver,
                         rotation: d.heading?.toDouble(),
                       ),
+                  for (final h in HazardService.instance.hazards.value)
+                    StpgMapMarker(
+                      id: 'hz-${h.id}',
+                      point: LatLng(h.latitude, h.longitude),
+                      label: '⚠ ${h.kind}',
+                      kind: StpgMarkerKind.alert,
+                    ),
                   if (gps.hasFix)
                     StpgMapMarker(
                       id: 'me',
@@ -285,11 +309,24 @@ class _NavigationScreenState extends State<NavigationScreen> {
               top: MediaQuery.sizeOf(context).width < 600 ? 116 : 64,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(color: Stpg.orange, borderRadius: BorderRadius.circular(14)),
-                child: Text('NEXT // ${next.instruction.toUpperCase()} • ${_dist(next.distanceMeters)}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Stpg.label(size: 14, color: Colors.white, spacing: 1)),
+                decoration: BoxDecoration(
+                    color: gs.offRoute ? Stpg.red : (gs.arrived ? Stpg.green : Stpg.orange),
+                    borderRadius: BorderRadius.circular(14)),
+                child: Row(children: [
+                  Icon(gs.arrived ? Icons.flag : maneuverIcon(next.instruction), color: Colors.white, size: 30),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                        gs.arrived
+                            ? 'ARRIVED // ${MissionTracker.stops.last.name.toUpperCase()}'
+                            : gs.rerouting
+                                ? 'OFF ROUTE // RECALCULATING…'
+                                : '${RouteGuidance.shortDist(gs.metersToNext)} // ${next.instruction.toUpperCase()}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Stpg.label(size: 14, color: Colors.white, spacing: 1)),
+                  ),
+                ]),
               ),
             ),
           // Style chips
@@ -378,6 +415,26 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ),
             ),
           ),
+          // Action rail: drive mode, hazard pin, voice
+          Positioned(
+            left: 10,
+            bottom: 70,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              _RoundAction(icon: Icons.speed, tooltip: 'Drive mode', onTap: () => app.go(CommandScreen.drive)),
+              const SizedBox(height: 10),
+              _RoundAction(
+                  icon: Icons.warning_amber_rounded,
+                  tooltip: 'Mark hazard',
+                  color: const Color(0xFFFFC107),
+                  onTap: () => showHazardDialog(context)),
+              const SizedBox(height: 10),
+              _RoundAction(
+                icon: VoiceService.instance.enabled.value ? Icons.volume_up : Icons.volume_off,
+                tooltip: 'Voice guidance',
+                onTap: VoiceService.instance.toggle,
+              ),
+            ]),
+          ),
           Positioned(
             right: 10,
             bottom: 24,
@@ -387,8 +444,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
                 color: Colors.black.withValues(alpha: 0.72),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Text('ACC ± ${acc ?? 0} FT',
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.circle, size: 8, color: accuracyColor(gps)),
+                const SizedBox(width: 6),
+                Text('ACC ± ${acc ?? '--'} FT',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+              ]),
             ),
           ),
         ]),
@@ -477,7 +538,10 @@ class _StatusTiles extends StatelessWidget {
     final locked = app.gps.hasFix;
     final active = app.trip.active;
     final items = <Widget>[
-      _StatusTile(label: 'GPS', value: locked ? 'LOCKED' : 'ACQUIRING', color: locked ? Stpg.green : Stpg.orange),
+      _StatusTile(
+          label: 'GPS',
+          value: locked ? '±${app.gps.accuracyFeet ?? '--'} FT' : 'ACQUIRING',
+          color: locked ? accuracyColor(app.gps) : Stpg.orange),
       const _StatusTile(label: 'NETWORK', value: 'ONLINE', color: Stpg.green),
       const _StatusTile(label: 'VEHICLE', value: 'CONNECTED', color: Stpg.green),
       _StatusTile(label: 'MISSION', value: active ? 'ACTIVE' : 'STANDBY', color: active ? Stpg.green : Stpg.orange),
@@ -600,5 +664,40 @@ class _BottomTabs extends StatelessWidget {
         Expanded(child: tiles[i]),
       ],
     ]);
+  }
+}
+
+
+/// Green ≤ 33 ft, orange ≤ 100 ft, red otherwise.
+Color accuracyColor(LiveGps g) {
+  final a = g.accuracyFeet;
+  if (!g.hasFix || a == null) return Stpg.red;
+  return a <= 33 ? Stpg.green : (a <= 100 ? Stpg.orange : Stpg.red);
+}
+
+class _RoundAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color color;
+  const _RoundAction({required this.icon, required this.tooltip, required this.onTap, this.color = Stpg.orange});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.72),
+        shape: CircleBorder(side: BorderSide(color: color, width: 1.5)),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: SizedBox(width: 48, height: 48, child: Icon(icon, color: color, size: 24)),
+        ),
+      ),
+    );
   }
 }
