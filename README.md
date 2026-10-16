@@ -15,7 +15,6 @@ Flutter rebuild of the **STPG Raptor Command Center** Android app (`com.drivestp
 | [docs/BRANCHES.md](docs/BRANCHES.md) | The project split into parts — one branch per milestone |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | What changed in each part |
 | [docs/FEATURES.md](docs/FEATURES.md) | Original-app feature spec and walkthrough notes |
-| [docs/AGENT_BRIEF.md](docs/AGENT_BRIEF.md) | Rules for parallel agents working on the code |
 
 ## Features at a glance
 
