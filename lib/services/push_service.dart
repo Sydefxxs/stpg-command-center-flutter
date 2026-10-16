@@ -51,7 +51,7 @@ class PushService {
       await fm.requestPermission(alert: true, badge: true, sound: true);
 
       await _local.initialize(
-        const InitializationSettings(
+        settings: const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
           iOS: DarwinInitializationSettings(),
         ),
@@ -106,7 +106,7 @@ class PushService {
           Uri.parse('${StpgConfig.supabaseUrl}/rest/v1/stpg_push_tokens?token=eq.${Uri.encodeQueryComponent(token)}'),
           headers: _headers(t),
         );
-        if (res.statusCode == 401) throw SupabaseUnauthorized();
+        if (res.statusCode == 401) throw SupabaseException('Unauthorized', 401);
         return null;
       });
     } catch (_) {}
@@ -139,7 +139,7 @@ class PushService {
           },
           body: body,
         );
-        if (res.statusCode == 401) throw SupabaseUnauthorized();
+        if (res.statusCode == 401) throw SupabaseException('Unauthorized', 401);
         return null;
       });
     } catch (_) {}
@@ -150,10 +150,10 @@ class PushService {
       final n = m.notification;
       if (n == null) return;
       await _local.show(
-        m.hashCode & 0x7fffffff,
-        n.title,
-        n.body,
-        const NotificationDetails(
+        id: m.hashCode & 0x7fffffff,
+        title: n.title,
+        body: n.body,
+        notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
