@@ -109,7 +109,7 @@ class _BootScreenState extends State<BootScreen> with SingleTickerProviderStateM
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          done ? '● ALL SYSTEMS OPERATIONAL' : 'INITIALIZING COMMAND SYSTEM...',
+                          done ? 'ALL SYSTEMS OPERATIONAL' : 'INITIALIZING COMMAND SYSTEM...',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: done ? _bootGreenBright : _bootGreen,
