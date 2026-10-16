@@ -281,7 +281,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
             Positioned(
               left: 12,
               right: 12,
-              top: 64,
+              top: MediaQuery.sizeOf(context).width < 600 ? 116 : 64,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(color: Stpg.orange, borderRadius: BorderRadius.circular(14)),
@@ -311,10 +311,10 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ),
             ]),
           ),
-          // Convoy route + recenter
+          // Convoy route + recenter (second row on phones)
           Positioned(
             right: 12,
-            top: 12,
+            top: MediaQuery.sizeOf(context).width < 600 ? 64 : 12,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               StpgButton(_routing ? 'ROUTING...' : 'CONVOY ROUTE',
                   filled: true, height: 42, onTap: _routing ? null : () => _buildRoute(gps)),
@@ -338,7 +338,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
             Positioned(
               left: 12,
               right: 12,
-              top: 64,
+              top: MediaQuery.sizeOf(context).width < 600 ? 116 : 64,
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Stpg.red, borderRadius: BorderRadius.circular(12)),
@@ -481,6 +481,13 @@ class _StatusTiles extends StatelessWidget {
       const _StatusTile(label: 'VEHICLE', value: 'CONNECTED', color: Stpg.green),
       _StatusTile(label: 'MISSION', value: active ? 'ACTIVE' : 'STANDBY', color: active ? Stpg.green : Stpg.orange),
     ];
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Column(children: [
+        Row(children: [Expanded(child: items[0]), const SizedBox(width: 10), Expanded(child: items[1])]),
+        const SizedBox(height: 10),
+        Row(children: [Expanded(child: items[2]), const SizedBox(width: 10), Expanded(child: items[3])]),
+      ]);
+    }
     return Row(children: [
       for (var i = 0; i < items.length; i++) ...[
         if (i > 0) const SizedBox(width: 10),

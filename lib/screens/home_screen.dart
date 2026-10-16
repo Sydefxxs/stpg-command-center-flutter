@@ -8,6 +8,7 @@ import '../dialogs/gmrs_dialog.dart';
 import '../dialogs/mission_controls_dialog.dart';
 import '../dialogs/weather_dialog.dart';
 import '../models.dart';
+import '../services/gps_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/compass_hud.dart';
@@ -226,6 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _narrowLayout(AppState app, Size size) {
+    if (size.width < 600) return _phoneLayout(app, size);
     final cols = size.width >= 440 ? 2 : 1;
     final cardWidth = (size.width - 32 - (cols - 1) * 12) / cols;
     Widget sized(Widget c) => SizedBox(width: cardWidth, child: c);
@@ -243,6 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _header(app, narrow: true),
+          const _LocationBar(),
           const SizedBox(height: 12),
           SizedBox(
             height: 120,
@@ -275,6 +278,134 @@ class _HomeScreenState extends State<HomeScreen> {
             for (final t in tiles) ...[t, const SizedBox(height: 12)],
         ],
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------- phone layout
+
+  /// Phone portrait: truck hero, compact 2-column cards, small command buttons.
+  Widget _phoneLayout(AppState app, Size size) {
+    final gps = app.gps;
+    final w = app.weather;
+    final ch = app.radio.channel;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        _header(app, narrow: true),
+        const _LocationBar(),
+        SizedBox(
+          height: size.height * 0.30,
+          child: Stack(children: [
+            Align(alignment: Alignment.topCenter, child: CompassHud(headingDegrees: gps.bearingDegrees)),
+            const Align(alignment: Alignment.bottomCenter, child: _RaptorPill()),
+          ]),
+        ),
+        const SizedBox(height: 10),
+        _t(app, _tMission, _missionBar(app)),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.45,
+          children: [
+            _t(app, _tDriver, _mini(app, _tDriver, StpgIcons.driver, 'DRIVER', app.driverNumberText,
+                sub: 'PROFILE ›', valueColor: Stpg.orange, onTap: () => showDriverProfileDialog(context))),
+            _t(app, _tWeather, _mini(app, _tWeather, weatherIconFor(w, app.isDay), 'WEATHER',
+                w?.temperatureF != null ? '${w!.temperatureF}°F' : '--°',
+                sub: w == null ? 'LOADING…' : '${w.condition} • ${w.windMph ?? '--'} MPH',
+                onTap: () => showWeatherDialog(context))),
+            _t(app, _tGps, _mini(app, _tGps, StpgIcons.gps, 'GPS', gps.hasFix ? 'LOCKED' : 'SEARCHING',
+                valueColor: gps.hasFix ? Stpg.green : Stpg.orange,
+                sub: gps.hasFix
+                    ? '${gps.latitude.toStringAsFixed(4)}, ${gps.longitude.toStringAsFixed(4)}'
+                    : 'TAP TO ALLOW LOCATION',
+                onTap: gps.hasFix ? null : () => GpsService.instance.retry())),
+            _t(app, _tGmrs, _mini(app, _tGmrs, StpgIcons.comms, 'GMRS CHANNEL', ch != null ? '$ch' : '--',
+                valueColor: Stpg.orange, sub: app.radio.syncLabel, onTap: () => showGmrsDialog(context))),
+            _mini(app, -1, StpgIcons.vehicle, 'VEHICLE', app.vehicleName,
+                sub: 'MODE NORMAL', onTap: () => app.go(CommandScreen.vehicle)),
+            _t(app, _tSystem, _mini(app, _tSystem, StpgIcons.system, 'SYSTEM', 'ONLINE',
+                valueColor: Stpg.green, sub: 'NETWORK • COMMAND READY')),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 2.6,
+          children: [
+            _t(app, _tNav, _phoneTile(StpgIcons.navigation, 'NAVIGATION', () => app.go(CommandScreen.navigation),
+                selected: true, highlighted: _hl(app, _tNav))),
+            _t(app, _tComms, _phoneTile(StpgIcons.comms, 'COMMS', () => app.go(CommandScreen.comms),
+                highlighted: _hl(app, _tComms),
+                badge: app.isAdmin && app.activeAssistance.isNotEmpty ? '${app.activeAssistance.length}' : null)),
+            _phoneTile(StpgIcons.vehicle, 'VEHICLE', () => app.go(CommandScreen.vehicle)),
+            _phoneTile(StpgIcons.update, 'UPDATE', () async {
+              try {
+                await launchUrl(Uri.parse(StpgConfig.commandCenterUrl), mode: LaunchMode.externalApplication);
+              } catch (_) {}
+            }),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  Widget _mini(AppState app, int target, IconData icon, String label, String value,
+      {String? sub, Color? valueColor, VoidCallback? onTap}) {
+    return StpgPanel(
+      opacity: _panelOpacity,
+      highlighted: target >= 0 && _hl(app, target),
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Row(children: [
+          Icon(icon, size: 15, color: Stpg.orange),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: Stpg.label(size: 10, color: Stpg.orange, spacing: 1.4)),
+          ),
+        ]),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value, style: Stpg.title(size: 24, color: valueColor, spacing: 0.8)),
+        ),
+        if (sub != null)
+          Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: Stpg.label(size: 9.5, spacing: 0.8)),
+      ]),
+    );
+  }
+
+  Widget _phoneTile(IconData icon, String title, VoidCallback onTap,
+      {bool selected = false, bool highlighted = false, String? badge}) {
+    return StpgPanel(
+      onTap: onTap,
+      highlighted: highlighted || selected,
+      color: selected ? Stpg.activePanel : null,
+      radius: 14,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(children: [
+        Icon(icon, size: 20, color: selected ? Stpg.orange : Stpg.text),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: Stpg.title(size: 14, color: selected ? Stpg.orange : Stpg.text, spacing: 1)),
+        ),
+        if (badge != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: Stpg.red, borderRadius: BorderRadius.circular(8)),
+            child: Text(badge, style: Stpg.label(size: 10, color: Colors.white, spacing: 0)),
+          ),
+      ]),
     );
   }
 
@@ -726,6 +857,38 @@ class _RaptorPill extends StatelessWidget {
         border: Border.all(color: Stpg.orange, width: 1.2),
       ),
       child: Text('STPG RAPTOR • 2025', style: Stpg.label(size: 12, color: Colors.white, spacing: 2.2)),
+    );
+  }
+}
+
+/// Shown when location is blocked: tap to ask the browser/phone again.
+class _LocationBar extends StatelessWidget {
+  const _LocationBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return ValueListenableBuilder<String?>(
+      valueListenable: GpsService.instance.error,
+      builder: (context, err, _) {
+        if (err == null || app.gps.hasFix) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: StpgPanel(
+            onTap: () => GpsService.instance.retry(),
+            borderColor: Stpg.orange,
+            color: Stpg.activePanel,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(children: [
+              const Icon(Icons.location_off, color: Stpg.orange, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('LOCATION OFF — TAP TO ALLOW', style: Stpg.label(size: 12, color: Stpg.orange, spacing: 1.2)),
+              ),
+            ]),
+          ),
+        );
+      },
     );
   }
 }

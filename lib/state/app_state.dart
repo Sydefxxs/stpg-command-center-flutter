@@ -159,19 +159,27 @@ class AppState extends ChangeNotifier {
   String? weatherError;
   DateTime? _weatherAt;
 
+  bool _hadFix = false;
+
   void _onGps() {
     gps = GpsService.instance.live.value;
+    if (gps.hasFix && !_hadFix) {
+      _hadFix = true;
+      _weatherAt = null; // refresh for the real position on first fix
+    }
     if (gps.hasFix && (_weatherAt == null || DateTime.now().difference(_weatherAt!) > const Duration(minutes: 10))) {
       refreshWeather();
     }
     notifyListeners();
   }
 
+  /// Weather for the GPS position, or for San Antonio until the first fix.
   Future<void> refreshWeather() async {
-    if (!gps.hasFix) return;
     _weatherAt = DateTime.now();
+    final lat = gps.hasFix ? gps.latitude : 29.4252;
+    final lng = gps.hasFix ? gps.longitude : -98.4946;
     try {
-      weather = await WeatherApi.fetch(gps.latitude, gps.longitude);
+      weather = await WeatherApi.fetch(lat, lng);
       weatherError = null;
     } catch (e) {
       weatherError = 'WEATHER OFFLINE';
@@ -330,6 +338,7 @@ class AppState extends ChangeNotifier {
     screen = CommandScreen.home;
     notifyListeners();
     unawaited(GpsService.instance.start());
+    unawaited(refreshWeather());
     unawaited(_loadProfile());
     unawaited(_pollRadio());
     _radioTimer?.cancel();

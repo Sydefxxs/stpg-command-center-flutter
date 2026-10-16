@@ -311,7 +311,9 @@ class SubScreenScaffold extends StatelessWidget {
       color: Stpg.dark,
       child: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
+          padding: MediaQuery.sizeOf(context).width < 600
+              ? const EdgeInsets.fromLTRB(14, 12, 14, 24)
+              : const EdgeInsets.fromLTRB(28, 20, 28, 28),
           child: child,
         ),
       ),
