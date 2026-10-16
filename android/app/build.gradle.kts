@@ -20,6 +20,11 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23
+        val localProps = java.util.Properties().apply {
+            val f = rootProject.file("local.properties"); if (f.exists()) f.inputStream().use { load(it) }
+        }
+        manifestPlaceholders["MAPS_API_KEY"] =
+            System.getenv("GOOGLE_MAPS_API_KEY") ?: localProps.getProperty("GOOGLE_MAPS_API_KEY", "")
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -46,4 +51,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// Firebase push notifications: only enabled once android/app/google-services.json is added.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

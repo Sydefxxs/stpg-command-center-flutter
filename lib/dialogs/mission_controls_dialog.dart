@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../models.dart';
 import '../services/mission_tracker.dart';
+import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/stpg_widgets.dart';
 
@@ -148,6 +149,12 @@ class _MissionControlsState extends State<_MissionControls> {
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Stpg.gray, fontSize: 12, fontWeight: FontWeight.w700)),
             ],
+            const SizedBox(height: 10),
+            StpgButton('TRIP HISTORY', expand: true, onTap: () {
+              final app = AppScope.read(context);
+              Navigator.of(context).pop();
+              app.go(CommandScreen.trips);
+            }),
             const SizedBox(height: 10),
             StpgButton('CLOSE', filled: true, expand: true, onTap: () => Navigator.of(context).pop()),
           ],

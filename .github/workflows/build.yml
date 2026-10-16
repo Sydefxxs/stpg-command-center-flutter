@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -21,7 +24,7 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
-      - run: flutter build apk --release
+      - run: flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY
       - uses: actions/upload-artifact@v4
         with:
           name: stpg-command-center-apk
@@ -36,7 +39,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
+      - run: /usr/libexec/PlistBuddy -c "Set :GMSApiKey $GOOGLE_MAPS_API_KEY" ios/Runner/Info.plist
+      - run: flutter build ios --release --no-codesign --dart-define=GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY
       - run: cd build/ios/iphoneos && mkdir Payload && cp -r Runner.app Payload/ && zip -qr stpg-command-center-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with:

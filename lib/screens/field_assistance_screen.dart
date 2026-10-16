@@ -6,6 +6,7 @@ import '../api/supabase_api.dart';
 import '../models.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/sos_panel.dart';
 import '../widgets/stpg_widgets.dart';
 
 /// 02C // FIELD ASSISTANCE — driver-facing request / share location / 911 screen.
@@ -152,6 +153,8 @@ class _FieldAssistanceScreenState extends State<FieldAssistanceScreen> {
         ),
         const SizedBox(height: 18),
         _statusRow(gps),
+        const SizedBox(height: 16),
+        const SosPanel(),
         const SizedBox(height: 16),
         ResponsiveSplit(
           mainFlex: 2,

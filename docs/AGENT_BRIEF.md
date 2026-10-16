@@ -19,3 +19,12 @@ Project root: `/home/claude/app` (Flutter app, package name `stpg_command_center
 - Fix the bugs listed in FEATURES.md §8 that touch your screens (e.g. never show "null", back buttons go to the right parent screen via `app.back()`).
 - Match the look: uppercase labels, heavy weights, wide letter-spacing, rounded panels, orange accents, day/night colors via `Stpg` getters (read them inside build so theme changes apply).
 - When done, reply with ≤10 lines: files written, anything stubbed/assumed, any change you need in a lead-owned file. Do not paste code back.
+
+## Round 2 notes
+- Project root is now `/home/claude/stpg` (the real repo; android/ and ios/ exist). Use that path instead of /home/claude/app.
+- Packages now also available: `google_maps_flutter`, `firebase_core`, `firebase_messaging`, `flutter_local_notifications` (versions resolved later — write against their current major APIs).
+- `StpgConfig.googleMapsApiKey` / `StpgConfig.hasGoogleMaps`, `convoyShareSeconds`, `convoyStaleSeconds`, `sosBeaconSeconds` in lib/config.dart.
+- New routes: `CommandScreen.convoy`, `CommandScreen.trips` (router already wired).
+- Shared stubs with fixed public APIs (only the owner replaces the body): `lib/widgets/stpg_map.dart` (P1), `lib/services/directions_service.dart` (P1), `lib/services/convoy_service.dart` (P2), `lib/services/push_service.dart` (P3), `lib/services/sos_service.dart` (P4). Other agents code against the stub API.
+- Supabase SQL goes in `supabase/migrations/NNN_name.sql` (idempotent: `create table if not exists`, RLS enabled, policies for `authenticated`). Edge functions in `supabase/functions/<name>/index.ts`.
+- Web preview must keep working: guard mobile-only plugins with `kIsWeb` / `defaultTargetPlatform`.
