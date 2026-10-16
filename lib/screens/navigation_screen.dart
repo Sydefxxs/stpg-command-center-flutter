@@ -6,6 +6,7 @@ import '../config.dart';
 import '../models.dart';
 import '../services/convoy_service.dart';
 import '../services/directions_service.dart';
+import '../services/heading_service.dart';
 import '../services/mission_tracker.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -270,7 +271,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                       point: LatLng(gps.latitude, gps.longitude),
                       label: 'YOU',
                       kind: StpgMarkerKind.self,
-                      rotation: gps.bearingDegrees?.toDouble(),
+                      rotation: HeadingService.instance.heading.value ?? gps.bearingDegrees?.toDouble(),
                     ),
                 ],
               ),
