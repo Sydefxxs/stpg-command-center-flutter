@@ -2,6 +2,8 @@ name: build
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 on:
   push:
@@ -69,3 +71,24 @@ jobs:
           mkdir -p ci-logs && cd ci-logs && tail -300 build-ios.txt > build-ios-tail.txt 2>/dev/null; git init -q && git checkout -q -b ci-ios
           git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "ios logs ${GITHUB_SHA::7}" || true
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-ios
+
+  web:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build web --release --base-href /stpg-command-center-flutter/ --dart-define=GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+      - id: deploy
+        uses: actions/deploy-pages@v4
