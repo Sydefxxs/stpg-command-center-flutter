@@ -60,6 +60,10 @@ class SupabaseApi {
     return _check(res);
   }
 
+  /// Generic PostgREST call (throws [SupabaseException], so `app.authed` can refresh on 401).
+  static Future<dynamic> rest(String method, String path, String token, [Object? body, Map<String, String>? extra]) =>
+      method == 'GET' ? _get(path, token) : _send(method, path, token, body, extra: extra);
+
   // ---------- Auth ----------
   static StpgSession _parseSession(dynamic j) {
     if (j is! Map) throw SupabaseException('LOGIN FAILED // Invalid server response');

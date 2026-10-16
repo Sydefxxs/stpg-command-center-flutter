@@ -48,6 +48,8 @@ dependencies:
   flutter_local_notifications: any
   flutter_compass: any
   web: any
+  flutter_tts: any
+  wakelock_plus: any
 
 dev_dependencies:
   flutter_test:

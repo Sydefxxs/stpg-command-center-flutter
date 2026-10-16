@@ -6,8 +6,11 @@ import 'package:latlong2/latlong.dart';
 import '../config.dart';
 import '../models.dart';
 import '../services/convoy_service.dart';
+import '../services/hazard_service.dart';
 import '../services/heading_service.dart';
 import '../services/mission_tracker.dart';
+import '../services/route_guidance.dart';
+import '../services/wake_service.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/stpg_map.dart';
@@ -24,6 +27,18 @@ class ConvoyScreen extends StatefulWidget {
 class _ConvoyScreenState extends State<ConvoyScreen> {
   final _map = StpgMapController();
   bool _satellite = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WakeService.instance.hold('convoy');
+  }
+
+  @override
+  void dispose() {
+    WakeService.instance.release('convoy');
+    super.dispose();
+  }
 
   static double _miles(double lat1, double lng1, double lat2, double lng2) {
     const r = 3958.8; // earth radius in miles
@@ -78,7 +93,10 @@ class _ConvoyScreenState extends State<ConvoyScreen> {
         ),
         ValueListenableBuilder<List<ConvoyDriver>>(
           valueListenable: svc.drivers,
-          builder: (context, drivers, _) => _body(app, drivers, narrow),
+          builder: (context, drivers, _) => ValueListenableBuilder<List<Hazard>>(
+            valueListenable: HazardService.instance.hazards,
+            builder: (context, _, _) => _body(app, drivers, narrow),
+          ),
         ),
       ]),
     );
@@ -102,7 +120,9 @@ class _ConvoyScreenState extends State<ConvoyScreen> {
       }
     }
     final myDistToEnd = me.hasFix ? _miles(me.latitude, me.longitude, last.latitude, last.longitude) : null;
-    final behind = (leader != null && leader.userId != myId && myDistToEnd != null) ? myDistToEnd - leaderDist : 0.0;
+    final behind = (leader != null && leader.userId != myId && myDistToEnd != null)
+        ? RouteGuidance.instance.behindLeaderMiles.value
+        : 0.0;
 
     final sorted = [...drivers]
       ..sort((a, b) {
@@ -127,6 +147,8 @@ class _ConvoyScreenState extends State<ConvoyScreen> {
             kind: d.sos ? StpgMarkerKind.alert : StpgMarkerKind.driver,
             rotation: d.heading?.toDouble(),
           ),
+      for (final h in HazardService.instance.hazards.value)
+        StpgMapMarker(id: 'hz-${h.id}', point: LatLng(h.latitude, h.longitude), label: '⚠ ${h.kind}', kind: StpgMarkerKind.alert),
       if (me.hasFix)
         StpgMapMarker(
           id: 'me',

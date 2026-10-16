@@ -5,6 +5,7 @@ import 'screens/assistance_command_screen.dart';
 import 'screens/boot_screen.dart';
 import 'screens/comms_screen.dart';
 import 'screens/convoy_screen.dart';
+import 'screens/drive_screen.dart';
 import 'screens/dispatch_screen.dart';
 import 'screens/field_assistance_screen.dart';
 import 'screens/home_screen.dart';
@@ -70,6 +71,7 @@ class _Root extends StatelessWidget {
           CommandScreen.vehicle => const VehicleScreen(),
           CommandScreen.convoy => const ConvoyScreen(),
           CommandScreen.trips => const TripsScreen(),
+          CommandScreen.drive => const DriveScreen(),
         };
     }
     return PopScope(
